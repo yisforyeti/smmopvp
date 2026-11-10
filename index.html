@@ -750,7 +750,8 @@
             this.applySort(this.radioVal);
             for(var j = 0; j < this.wars.length; j++) {
                 if(this.wars[j].id === warId) {
-                    this.wars[j].avail = `${available.length}\/${attackable.length} (${highLevel}/${veryHighLevel})`;
+                    // this.wars[j].avail = `${available.length}\/${attackable.length} (${highLevel}/${veryHighLevel})`;
+                    this.wars[j].avail = `${available.length}\/${attackable.length}`;
                     this.wars[j].availCount = available.length;
                     break;
                 }
