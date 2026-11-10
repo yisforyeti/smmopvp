@@ -129,7 +129,7 @@
             </div>
             <div v-if="listFor(s.key).length === 0" class="empty">None</div>
             <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
-                <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}}<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
+                <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}} ({{gid}})<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
                 <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
             </div>
         </div>
@@ -153,7 +153,7 @@
                 <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
                 <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
                 <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
-                <a :href="item.url" target="_blank">{{item.name}}</a>
+                <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
             </div>
             <div class="war-meta">
                 <a href="#" class="avail" title="Tap to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a>
@@ -167,7 +167,7 @@
     <section v-show="tab === 'members'">
         <div v-if="sortedDisplay.length === 0" class="empty">No targets yet. Load your wars in Setup, then wait for guilds to finish loading.</div>
         <a class="member" v-for="item in sortedDisplay" :key="item.user_id" :href="item.url" target="_blank" @click="markFought(item.user_id)">
-            <span class="g">{{item.guildName}}</span>
+            <span class="g">{{item.guildName}} ({{item.guildId}})</span>
             <span class="n">{{item.name}}</span>
             <span class="lv">Lv {{item.level}}</span>
         </a>
@@ -189,7 +189,7 @@
         <div class="modal-body">
             <label class="pick" v-for="(item, i) in modalItems()" :key="i">
                 <input type="checkbox" :checked="pendingSel.includes(item.id)" @change="toggleSel(item.id)">
-                <span class="pick-name">{{item.name}}</span>
+                <span class="pick-name">{{item.name}} ({{item.id}})</span>
                 <span v-if="!item.atWar" class="tag muted">not at war</span>
                 <span v-if="otherTag(item.id)" class="tag">{{otherTag(item.id)}}</span>
             </label>
@@ -715,6 +715,7 @@
             for(var j = 0; j < data.length; j++) {
                 let player = data[j];
                 player.guildName = guildName.name;
+                player.guildId = warId;
                 if(player.banned == 1 || player.safe_mode == 1) continue;
 
                 if(player.level <= 30) continue;
