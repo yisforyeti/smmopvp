@@ -19,6 +19,7 @@
         .stats .k { color: #40E0D0; }
         .stats .k a { color: #40E0D0; }
         .loadbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: #ccc; }
+        .api-paused { color: #ffcc66; font-weight: bold; }
         .mini { width: auto; padding: 4px 12px; font-size: 14px; }
         .tabs { display: flex; gap: 6px; margin: 8px 0 12px; }
         .tabs button { flex: 1; margin: 0; padding: 10px 4px; background: transparent; color: #ccc; border: 1px solid #333; border-radius: 8px; font-size: 15px; }
@@ -80,7 +81,7 @@
 <div class="app">
     <header class="top">
         <div class="links">
-            <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Travel</a>
+            <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/travel?new_page=true">&lt; Travel</a>
             | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
             | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
         </div>
@@ -91,10 +92,15 @@
             <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
         </div>
         <div class="loadbar">
-            <span v-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
+            <span v-if="paused" class="api-paused">⏸ API paused</span>
+            <span v-else-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
             <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
             <span v-else>Not loaded</span>
-            <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running">Refresh</button>
+            <span>API {{apiCalls}}/40 per min</span>
+        </div>
+        <div class="loadbar">
+            <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
+            <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running || paused">Refresh</button>
         </div>
     </header>
 
@@ -208,11 +214,26 @@
     // (profile polling, wars, guild members, and manual per-guild refresh taps included).
     let apiChain = Promise.resolve();
     let lastApiCall = 0;
+    let apiPaused = false;
+    let pauseWaiters = [];
+    const apiTimes = [];
+    function recentCalls() { // calls made in the last 60 seconds
+        const cutoff = Date.now() - 60000;
+        while (apiTimes.length && apiTimes[0] < cutoff) apiTimes.shift();
+        return apiTimes.length;
+    }
+    function setApiPaused(v) {
+        apiPaused = v;
+        if (!v) { pauseWaiters.forEach(r => r()); pauseWaiters = []; }
+    }
     function apiFetch(url) {
         const run = apiChain.then(async () => {
+            while (apiPaused) await new Promise(r => pauseWaiters.push(r));
             const wait = lastApiCall + API_GAP_MS - Date.now();
             if (wait > 0) await new Promise(r => setTimeout(r, wait));
+            while (apiPaused) await new Promise(r => pauseWaiters.push(r)); // paused during the gap wait
             lastApiCall = Date.now();
+            apiTimes.push(lastApiCall);
             return fetch(url, { method: 'POST' });
         });
         apiChain = run.catch(() => {});
@@ -244,6 +265,8 @@
         wars: [],
         rawWars: [],
         tab: 'members',
+        paused: false,
+        apiCalls: 0,
         modalQuery: '',
         progress: { done: 0, total: 0, running: false },
         sortMode: 'leastKills',
@@ -300,6 +323,7 @@
             this.loadSettings();
             this.loadUi();
             this.startProfile();
+            setInterval(() => { this.apiCalls = recentCalls(); }, 1000);
             if (this.apiKey) {
                 await this.loadAll();
             } else {
@@ -496,7 +520,7 @@
         async startProfile() {
             if(!this.profileInterval) {
                 this.profileInterval = setInterval(() => {
-                    if (this.apiKey) this.getProfile();
+                    if (this.apiKey && !this.paused) this.getProfile();
                 }, 30 * 1000);
             }
         },
@@ -604,12 +628,12 @@
 
         // [UNUSED - REVIEW] old version of getNext(); nothing calls it (the button uses getNext())
         // async __getNext() {
-        //     window.open(this.sortedDisplay[0].url, 'blank');
+        //     window.open(this.sortedDisplay[0].url, '_blank');
         //     this.fought.push(this.sortedDisplay[0].user_id);
         // },
         async getNext() {
             if(this.sortedDisplay.length > 0) {
-                window.open(this.sortedDisplay[0].url, 'blank');
+                window.open(this.sortedDisplay[0].url, '_blank');
                 this.markFought(this.sortedDisplay[0].user_id);
             }
         },
@@ -640,6 +664,10 @@
             }
             this.progress.running = false;
             this.applySort();
+        },
+        togglePause() {
+            this.paused = !this.paused;
+            setApiPaused(this.paused);
         },
         async refresh() {
             if (!this.apiKey || this.progress.running) return;
