@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <title>Custom Guild Wars</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <style>
+        :root { --tab-h: 0px; }
+        body { font-family: arial, sans-serif; margin: 0; }
+        .app { max-width: 720px; margin: 0 auto; padding: 8px 12px 110px; }
+        a { text-decoration: none; }
+        button { margin: 0; }
+        .top { padding: 4px 0 6px; font-size: 14px; }
+        .links { text-align: center; color: #ffcc66; }
+        .links a { color: #ffcc66; }
+        .stats { text-align: center; margin-top: 6px; padding: 4px; background: rgba(33,33,33,.75); border-radius: 4px; color: #e5e5e5; }
+        .stats .k { color: #40E0D0; }
+        .stats .k a { color: #40E0D0; }
+        .loadbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: #ccc; }
+        .mini { width: auto; padding: 4px 12px; font-size: 14px; }
+        .tabs { display: flex; gap: 6px; margin: 8px 0 12px; }
+        .tabs button { flex: 1; margin: 0; padding: 10px 4px; background: transparent; color: #ccc; border: 1px solid #333; border-radius: 8px; font-size: 15px; }
+        .tabs button.active { background: #0088ff; color: #fff; border-color: #0088ff; }
+        .card, .war, .member { background: #1b2430; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+        .war { border-left: 3px solid transparent; }
+        .priority-guild { background: rgba(255,75,75,.15); border-left-color: #ff4b4b; }
+        .focus-guild { background: rgba(255,204,102,.15); border-left-color: #ffcc66; }
+        .ignored-guild { opacity: .5; border-left-color: #888; }
+        .war-main { font-size: 16px; }
+        .war-meta { display: flex; gap: 14px; margin-top: 4px; font-size: 14px; color: #bbb; }
+        .war-meta .avail { color: #40E0D0; min-width: 120px; padding: 4px 0; }
+        .badge { font-size: 11px; padding: 1px 5px; border-radius: 3px; margin-right: 6px; font-weight: bold; }
+        .badge-priority { background: #ff4b4b; color: #fff; }
+        .badge-focus { background: #ffcc66; color: #222; }
+        .badge-ignore { background: #888; color: #fff; }
+        .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .toolbar select { margin: 0; flex: 1; }
+        .member { display: flex; align-items: center; gap: 10px; min-height: 44px; color: #fff; }
+        .member .g { color: #ffcc66; flex: 0 0 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .member .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .member .lv { color: #bbb; }
+        .empty { color: #888; font-style: italic; padding: 8px 0; }
+        .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .section-title { font-weight: bold; font-size: 17px; }
+        .guild-item { display: flex; justify-content: space-between; align-items: center; min-height: 40px; border-top: 1px solid #2a3340; }
+        .guild-item a { color: #ddd; }
+        .remove-btn { background: none; border: none; color: #ff7777; font-size: 22px; width: 44px; padding: 0; }
+        .status-err { color: #ff7777; } .status-ok { color: #7fdc7f; }
+        .getnext { position: fixed; left: 0; right: 0; bottom: var(--tab-h); z-index: 15; padding: 8px 12px; background: linear-gradient(rgba(17,25,31,0), #11191f 40%); }
+        .getnext button { display: block; width: 100%; max-width: 720px; margin: 0 auto; height: 52px; font-size: 18px; }
+        .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; }
+        .modal { background: #1b2430; width: min(560px, 100%); height: min(80vh, 720px); display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; }
+        .modal-head { padding: 12px; border-bottom: 1px solid #2a3340; }
+        .modal-title { font-size: 17px; margin-bottom: 8px; }
+        .modal-title .count { color: #999; font-size: 13px; margin-left: 6px; }
+        .modal-head input { margin: 0; }
+        .modal-body { flex: 1; overflow-y: auto; padding: 4px 12px; -webkit-overflow-scrolling: touch; }
+        .pick { display: flex; align-items: center; gap: 10px; min-height: 46px; margin: 0; border-bottom: 1px solid #2a3340; }
+        .pick input { margin: 0; flex: 0 0 auto; }
+        .pick-name { flex: 1; }
+        .tag { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: #34506e; color: #fff; }
+        .tag.muted { background: #444; color: #bbb; }
+        .modal-foot { display: flex; gap: 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid #2a3340; }
+        .modal-foot button { flex: 1; margin: 0; }
+        body.modal-open { overflow: hidden; }
+        @media (max-width: 700px) {
+            :root { --tab-h: calc(62px + env(safe-area-inset-bottom)); }
+            .tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; margin: 0; gap: 0; background: #11191f; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); }
+            .tabs button { border: none; border-radius: 0; height: 62px; }
+            .app { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+            .modal { width: 100%; height: 100%; height: 100dvh; border-radius: 0; }
+        }
+    </style>
+    <script src="https://unpkg.com/petite-vue"></script>
+</head>
+
+<body id="gwapp" @vue:mounted="init()">
+<div class="app">
+    <header class="top">
+        <div class="links">
+            <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Travel</a>
+            | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
+            | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
+        </div>
+        <div class="stats" v-if="profile.id">
+            {{profile.name}}:&nbsp;
+            <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
+            <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
+            <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
+        </div>
+        <div class="loadbar">
+            <span v-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
+            <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
+            <span v-else>Not loaded</span>
+            <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running">Refresh</button>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <button :class="{active: tab === 'setup'}" @click="setTab('setup')">⚙️ Setup</button>
+        <button :class="{active: tab === 'wars'}" @click="setTab('wars')">⚔️ Wars</button>
+        <button :class="{active: tab === 'members'}" @click="setTab('members')">👥 Members</button>
+    </nav>
+
+    <!-- ============ SETUP ============ -->
+    <section v-show="tab === 'setup'">
+        <div class="card">
+            <div style="font-weight: bold; margin-bottom: 6px;">API Key</div>
+            <input :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="Paste your API key" autocomplete="off" @keyup.enter="saveKeyAndLoad()" style="margin-bottom: 8px;" />
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <label style="margin: 0;"><input type="checkbox" v-model="showKey" style="margin: 0 6px 0 0;"> Show</label>
+                <button class="mini" @click="saveKeyAndLoad()">Save &amp; Load</button>
+            </div>
+            <div v-if="status" :class="statusIsError ? 'status-err' : 'status-ok'" style="margin-top: 6px; font-size: 14px;">{{status}}</div>
+        </div>
+
+        <div class="card" v-for="s in sections" :key="s.key">
+            <div class="section-head">
+                <span class="section-title" :style="{color: s.color}">{{s.label}} ({{listFor(s.key).length}})</span>
+                <button class="mini" @click="startAssign(s.key)" :disabled="wars.length === 0">Assign…</button>
+            </div>
+            <div v-if="listFor(s.key).length === 0" class="empty">None</div>
+            <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
+                <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}}<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
+                <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
+            </div>
+        </div>
+        <div v-if="wars.length === 0" class="empty">Save &amp; Load your API key to enable Assign.</div>
+    </section>
+
+    <!-- ============ WARS ============ -->
+    <section v-show="tab === 'wars'">
+        <div class="toolbar">
+            <span style="font-weight: bold;">Sort</span>
+            <select v-model="sortMode" @change="applyWarSort(); saveUi()">
+                <option value="leastKills">Least Kills (Priority/Focus on top)</option>
+                <option value="mostKills">Most Kills (Priority/Focus on top)</option>
+                <option value="mostAvail">Most Available</option>
+                <option value="leastAvail">Least Available</option>
+            </select>
+        </div>
+        <div v-if="wars.length === 0" class="empty">No wars loaded yet. Go to Setup and Save &amp; Load.</div>
+        <div class="war" v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+            <div class="war-main">
+                <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
+                <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
+                <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
+                <a :href="item.url" target="_blank">{{item.name}}</a>
+            </div>
+            <div class="war-meta">
+                <a href="#" class="avail" title="Tap to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a>
+                <span>Kills {{item.kills}}</span>
+                <span>Deaths {{item.deaths}}</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ MEMBERS ============ -->
+    <section v-show="tab === 'members'">
+        <div v-if="sortedDisplay.length === 0" class="empty">No targets yet. Load your wars in Setup, then wait for guilds to finish loading.</div>
+        <a class="member" v-for="item in sortedDisplay" :key="item.user_id" :href="item.url" target="_blank" @click="markFought(item.user_id)">
+            <span class="g">{{item.guildName}}</span>
+            <span class="n">{{item.name}}</span>
+            <span class="lv">Lv {{item.level}}</span>
+        </a>
+    </section>
+</div>
+
+<div class="getnext" v-show="tab !== 'setup'">
+    <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+</div>
+
+<!-- ============ ASSIGN MODAL ============ -->
+<div class="modal-backdrop" v-if="assignTarget" @click.self="cancelAssign()">
+    <div class="modal" role="dialog">
+        <div class="modal-head">
+            <div class="modal-title">Assign to <b :style="{color: sectionFor(assignTarget).color}">{{sectionFor(assignTarget).label}}</b>
+                <span class="count">{{pendingSel.length}} selected</span></div>
+            <input type="text" v-model="modalQuery" placeholder="Search guilds…" autocomplete="off">
+        </div>
+        <div class="modal-body">
+            <label class="pick" v-for="(item, i) in modalItems()" :key="i">
+                <input type="checkbox" :checked="pendingSel.includes(item.id)" @change="toggleSel(item.id)">
+                <span class="pick-name">{{item.name}}</span>
+                <span v-if="!item.atWar" class="tag muted">not at war</span>
+                <span v-if="otherTag(item.id)" class="tag">{{otherTag(item.id)}}</span>
+            </label>
+            <div v-if="modalItems().length === 0" class="empty">No matches</div>
+        </div>
+        <div class="modal-foot">
+            <button class="secondary" @click="cancelAssign()">Cancel</button>
+            <button @click="saveAssign()">Save</button>
+        </div>
+    </div>
+</div>
+</body>
+
+<script type="module">
+    const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
+    const UI_KEY = 'gwp4.ui';
+    const FOUGHT_KEY = 'gwp4.fought'; // only ids of players you already attacked - never API results
+    const FOUGHT_TTL = 30 * 60 * 1000; // 30 minutes
+    const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min)
+
+    // Every API request goes through this queue, so calls are always spaced >= API_GAP_MS apart
+    // (profile polling, wars, guild members, and manual per-guild refresh taps included).
+    let apiChain = Promise.resolve();
+    let lastApiCall = 0;
+    function apiFetch(url) {
+        const run = apiChain.then(async () => {
+            const wait = lastApiCall + API_GAP_MS - Date.now();
+            if (wait > 0) await new Promise(r => setTimeout(r, wait));
+            lastApiCall = Date.now();
+            return fetch(url, { method: 'POST' });
+        });
+        apiChain = run.catch(() => {});
+        return run;
+    }
+    const MY_GUILD_ID = 674;
+
+    // Used to show a friendly name for guilds that are in a list but not currently at war
+    const DEFAULT_NAMES = {
+        3452: 'The Rain Factory', 2836: 'The Scarlet Legion', 243: 'The WolfPack', 474: 'The Forest',
+        4134: 'Umbral', 3812: 'Coven',
+        3994: 'The Cult of SV', 4276: 'Eternal Gladiators', 3212: 'Shadow Garden',
+        607: 'The Knights Who Say Yee', 2874: 'The Blazing Beasts', 4250: 'SOLO', 574: 'Golden Arrows',
+        4054: 'Sweet Contenders', 3009: 'Demolitions Great Kingdom', 2089: 'Prostor', 3342: '[Slums] Guild',
+        1833: 'The Lost Crusade', 1873: 'The Asylum', 3348: 'afterlow', 2700: 'The Fallen', 518: 'Gloryindo',
+        2943: 'Old elfs', 3418: 'Ego', 4532: 'Sumbosia', 346: 'Abyss', 424: 'Knights of the Internet',
+        372: "Dread Pirate's Cove", 2596: 'The Pearly Gates', 2708: 'The Bear Tribe', 493: 'Limited Edition',
+        1518: 'Indonesian Trade Association', 427: 'UwU', 43: 'The MerryMen of SMMO', 3928: 'Spontaneous Runners'
+    };
+
+    PetiteVue.createApp({
+        // ---------- API key / status ----------
+        apiKey: '',
+        showKey: false,
+        status: '',
+        statusIsError: false,
+
+        profile: {},
+        wars: [],
+        rawWars: [],
+        tab: 'members',
+        modalQuery: '',
+        progress: { done: 0, total: 0, running: false },
+        sortMode: 'leastKills',
+        sortOptions: [
+            { value: 'leastKills', label: 'Least Kills' },
+            { value: 'mostKills', label: 'Most Kills' },
+            { value: 'mostAvail', label: 'Most Available' },
+            { value: 'leastAvail', label: 'Least Available' },
+        ],
+        // [UNUSED - REVIEW] never referenced anywhere
+        // guildLimit: 39,
+
+        // ---------- Guild lists (loaded from localStorage on init) ----------
+        ignoreWarIds: [],
+        priorityWarIds: [],
+        focusWarIds: [],
+
+        sections: [
+            { key: 'ignore',   label: 'Ignored',  color: '#aaaaaa' },
+            { key: 'priority', label: 'Priority', color: '#ff4b4b' },
+            { key: 'focus',    label: 'Focus',    color: '#ffcc66' },
+        ],
+
+        // ---------- Assign-mode state ----------
+        assignTarget: null,
+        pendingSel: [],
+
+        maxLevel: 135000,
+        myLevel: 120000,
+        // [UNUSED - REVIEW] never populated or read (star-prefix logic from gwp2 was not carried over)
+        // highCount: [],
+
+        radioVal: "guild",
+
+        procArrays: [],
+        warIds: [],
+        allAvail: [],
+        // [UNUSED - REVIEW] level-sorted lists only fed the removed "By Level" radios / dead targetCount block
+        // sortAvailLow: [],
+        // sortAvailHigh: [],
+        sortedDisplay: [],
+        fought: [-1],
+        ignoreTargets: [-1],
+        profileInterval: undefined,
+        // [UNUSED - REVIEW] never incremented, so the "targetCount > 150" block in getAttackable can never run
+        // targetCount: 0,
+        runId: 0,
+
+        // =====================================================
+        // Init / settings
+        // =====================================================
+        async init() {
+            try { localStorage.removeItem('gwp4.cache'); } catch (e) {} // old cache from an earlier build
+            this.loadSettings();
+            this.loadUi();
+            this.startProfile();
+            if (this.apiKey) {
+                await this.loadAll();
+            } else {
+                this.setStatus('Paste your API key and click Save & Load.', true);
+            }
+        },
+        loadSettings() {
+            let raw = null;
+            try {
+                raw = localStorage.getItem(STORAGE_KEY);
+            } catch (e) {
+                console.log('localStorage unavailable', e);
+            }
+            if (!raw) return;
+            try {
+                const s = JSON.parse(raw);
+                if (typeof s.apiKey === 'string') this.apiKey = s.apiKey;
+                if (Array.isArray(s.ignore)) this.ignoreWarIds = s.ignore;
+                if (Array.isArray(s.priority)) this.priorityWarIds = s.priority;
+                if (Array.isArray(s.focus)) this.focusWarIds = s.focus;
+            } catch (e) {
+                console.log('Could not parse saved settings', e);
+            }
+        },
+        saveSettings() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    apiKey: this.apiKey,
+                    ignore: this.ignoreWarIds,
+                    priority: this.priorityWarIds,
+                    focus: this.focusWarIds,
+                }));
+            } catch (e) {
+                console.log('Could not save to localStorage', e);
+            }
+        },
+        setStatus(msg, isError) {
+            this.status = msg;
+            this.statusIsError = !!isError;
+        },
+        async saveKeyAndLoad() {
+            this.apiKey = (this.apiKey || '').trim();
+            this.saveSettings();
+            if (!this.apiKey) {
+                this.setStatus('Please paste an API key first.', true);
+                return;
+            }
+            await this.loadAll();
+        },
+        async loadAll() {
+            this.runId++; // cancel any in-flight getAttackable loop
+            this.wars = [];
+            this.rawWars = [];
+            this.warIds = [];
+            this.procArrays = [];
+            this.allAvail = [];
+            // [UNUSED - REVIEW] sortAvailHigh / sortAvailLow (see state section)
+            // this.sortAvailHigh = [];
+            // this.sortAvailLow = [];
+            this.sortedDisplay = [];
+            this.fought = [-1];
+            this.ignoreTargets = [-1];
+            this.assignTarget = null;
+            this.pendingSel = [];
+
+            this.progress = { done: 0, total: 0, running: false };
+            this.fought = this.readFought();
+            this.setStatus('Loading…', false);
+            await this.getProfile();
+            await this.getWars();
+        },
+
+        // =====================================================
+        // Guild list helpers (sidebar)
+        // =====================================================
+        sectionFor(key) {
+            return this.sections.find(s => s.key === key);
+        },
+        listFor(key) {
+            if (key === 'ignore') return this.ignoreWarIds;
+            if (key === 'priority') return this.priorityWarIds;
+            return this.focusWarIds;
+        },
+        setList(key, arr) {
+            if (key === 'ignore') this.ignoreWarIds = arr;
+            else if (key === 'priority') this.priorityWarIds = arr;
+            else this.focusWarIds = arr;
+        },
+        // ---------- UI state + short-lived session cache ----------
+        loadUi() {
+            try {
+                const u = JSON.parse(localStorage.getItem(UI_KEY) || '{}');
+                if (['setup', 'wars', 'members'].includes(u.tab)) this.tab = u.tab;
+                if (this.sortOptions.some(o => o.value === u.sortMode)) this.sortMode = u.sortMode;
+            } catch (e) { console.log('Could not load UI state', e); }
+        },
+        saveUi() {
+            try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: this.tab, sortMode: this.sortMode })); } catch (e) {}
+        },
+        setTab(t) {
+            this.tab = t;
+            this.saveUi();
+            window.scrollTo(0, 0);
+        },
+        readFought() {
+            try {
+                const c = JSON.parse(localStorage.getItem(FOUGHT_KEY) || 'null');
+                if (c && Date.now() - c.t < FOUGHT_TTL && Array.isArray(c.ids)) return c.ids;
+            } catch (e) {}
+            return [-1];
+        },
+        saveFought() {
+            try { localStorage.setItem(FOUGHT_KEY, JSON.stringify({ t: Date.now(), ids: this.fought })); } catch (e) {}
+        },
+
+        // ---------- Assign modal helpers ----------
+        modalItems() {
+            const q = (this.modalQuery || '').trim().toLowerCase();
+            const items = this.rawWars.map(w => ({ id: w.id, name: w.name, atWar: true }));
+            this.pendingSel.forEach(id => {
+                if (!items.some(i => i.id === id)) items.push({ id: id, name: this.nameFor(id), atWar: false });
+            });
+            return items
+                .filter(i => !q || i.name.toLowerCase().includes(q) || String(i.id) === q)
+                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        },
+        otherTag(id) {
+            const o = this.sections.find(s => s.key !== this.assignTarget && this.listFor(s.key).includes(id));
+            return o ? o.label : '';
+        },
+        isAtWar(id) {
+            return this.rawWars.some(x => x.id === id);
+        },
+        nameFor(id) {
+            const w = this.rawWars.find(x => x.id === id);
+            if (w) return w.name;
+            return DEFAULT_NAMES[id] || `Guild #${id}`;
+        },
+        removeFrom(key, id) {
+            this.setList(key, this.listFor(key).filter(x => x !== id));
+            this.saveSettings();
+            this.rebuildWars();
+        },
+
+        // =====================================================
+        // Assign mode (checkboxes in the wars table)
+        // =====================================================
+        startAssign(key) {
+            this.assignTarget = key;
+            this.pendingSel = [...this.listFor(key)];
+            this.modalQuery = '';
+            document.body.classList.add('modal-open');
+        },
+        toggleSel(id) {
+            const i = this.pendingSel.indexOf(id);
+            if (i >= 0) this.pendingSel.splice(i, 1);
+            else this.pendingSel.push(id);
+        },
+        cancelAssign() {
+            document.body.classList.remove('modal-open');
+            this.assignTarget = null;
+            this.pendingSel = [];
+        },
+        saveAssign() {
+            const key = this.assignTarget;
+            if (!key) return;
+            const selected = this.pendingSel;
+
+            // keep existing order for ones that remain, then append newly added ones
+            const kept = this.listFor(key).filter(id => selected.includes(id));
+            const added = selected.filter(id => !kept.includes(id));
+            this.setList(key, kept.concat(added));
+
+            // a guild can only live in one list: remove selections from the other lists
+            this.sections.forEach(s => {
+                if (s.key !== key) {
+                    this.setList(s.key, this.listFor(s.key).filter(id => !selected.includes(id)));
+                }
+            });
+
+            this.saveSettings();
+            document.body.classList.remove('modal-open');
+            this.assignTarget = null;
+            this.pendingSel = [];
+            this.rebuildWars();
+        },
+
+        // =====================================================
+        // API
+        // =====================================================
+        async sleep(ms) {
+            await new Promise(res => setTimeout(res, ms));
+        },
+        async startProfile() {
+            if(!this.profileInterval) {
+                this.profileInterval = setInterval(() => {
+                    if (this.apiKey) this.getProfile();
+                }, 30 * 1000);
+            }
+        },
+        async getProfile() {
+            if (!this.apiKey) {
+                this.setStatus('Paste your API key first.', true);
+                return false;
+            }
+            console.log("Getting profile...");
+            try {
+                let url = `https://api.simple-mmo.com/v1/player/me?api_key=${encodeURIComponent(this.apiKey)}`;
+                let postResp = await apiFetch(url);
+                let data = await postResp.json();
+
+                if (!data || data.id === undefined) {
+                    this.setStatus('Profile request failed - check your API key.', true);
+                    return false;
+                }
+
+                let hp = ((data.hp / data.max_hp) * 100).toFixed(2);
+                this.myLevel = data.level;
+                this.maxLevel = Math.floor(this.myLevel * 1.20);
+                this.profile = {id: data.id, name: data.name, qp: data.quest_points, ep: data.energy, hpp: hp};
+                return true;
+            } catch (e) {
+                console.log(e);
+                this.setStatus('Profile request failed (network error).', true);
+                return false;
+            }
+        },
+        async getWars() {
+            console.log("Getting Wars...");
+            try {
+                let url = `https://api.simple-mmo.com/v1/guilds/wars/${MY_GUILD_ID}/1?api_key=${encodeURIComponent(this.apiKey)}`;
+                let postResp = await apiFetch(url);
+                let data = await postResp.json();
+                if (!Array.isArray(data)) {
+                    this.setStatus('Could not load guild wars - check your API key.', true);
+                    return;
+                }
+                this.processWars(data);
+            } catch (e) {
+                console.log(e);
+                this.setStatus('Could not load guild wars (network error).', true);
+            }
+        },
+        processWars(data) {
+            const raw = [];
+            for (let w = 0; w < data.length; w++) {
+                let gw = data[w].guild_1.id !== MY_GUILD_ID ? data[w].guild_1 : data[w].guild_2;
+                let gwKills = data[w].guild_1.id == MY_GUILD_ID ? data[w].guild_1.kills : data[w].guild_2.kills;
+                raw.push({ id: gw.id, name: gw.name, kills: gwKills, deaths: gw.kills });
+            }
+            this.rawWars = raw;
+            this.rebuildWars();
+            this.setStatus(`Loaded ${raw.length} guild wars.`, false);
+            this.getAttackable();
+        },
+
+        // Rebuilds this.wars ordering (priority -> focus -> rest) from rawWars,
+        // keeping any availability info already fetched.
+        rebuildWars() {
+            const prev = {};
+            this.wars.forEach(w => { prev[w.id] = w; });
+
+            let pool = this.rawWars.map(w => ({
+                ...w,
+                url: `https://web.simple-mmo.com/guilds/view/${w.id}/members?username=&min_level=31&max_level=${this.maxLevel}&role=&attackable=on&online_status=&inactivity_status=&new_page=true`
+            }));
+            pool.sort((p1, p2) => (p2.kills < p1.kills) ? 1 : (p2.kills > p1.kills) ? -1 : 0);
+
+            const extract = (ids) => {
+                const out = [];
+                ids.forEach(id => {
+                    const idx = pool.findIndex(x => x.id === id);
+                    if (idx >= 0) out.push(pool.splice(idx, 1)[0]);
+                });
+                return out;
+            };
+            const priorityWars = extract(this.priorityWarIds);
+            const focusWars = extract(this.focusWarIds);
+
+            this.procArrays = priorityWars.concat(focusWars, pool);
+            this.warIds = this.procArrays.map(x => x.id);
+
+            this.wars = this.procArrays.map((item, idx) => {
+                const old = prev[item.id];
+                return {
+                    id: item.id,
+                    url: item.url,
+                    name: item.name,
+                    avail: old ? old.avail : '...',
+                    availCount: old ? old.availCount : -1,
+                    originalIndex: idx,
+                    kills: item.kills,
+                    deaths: item.deaths,
+                    isPriority: this.priorityWarIds.includes(item.id),
+                    isFocus: this.focusWarIds.includes(item.id),
+                    isIgnored: this.ignoreWarIds.includes(item.id),
+                };
+            });
+
+            this.applyWarSort();
+        },
+
+        // [UNUSED - REVIEW] old version of getNext(); nothing calls it (the button uses getNext())
+        // async __getNext() {
+        //     window.open(this.sortedDisplay[0].url, 'blank');
+        //     this.fought.push(this.sortedDisplay[0].user_id);
+        // },
+        async getNext() {
+            if(this.sortedDisplay.length > 0) {
+                window.open(this.sortedDisplay[0].url, 'blank');
+                this.markFought(this.sortedDisplay[0].user_id);
+            }
+        },
+        markFought(userId) {
+            if (!this.fought.includes(userId)) {
+                this.fought.push(userId);
+            }
+            this.applySort();
+            this.saveFought();
+        },
+
+        // Always queries the API fresh for every non-ignored guild. apiFetch() enforces the 2s gap between calls.
+        async getAttackable() {
+            console.log("Getting Attackable...");
+            if (!this.apiKey) return;
+            const run = ++this.runId;
+            this.allAvail = [];
+            this.ignoreTargets = [-1];
+            this.applySort();
+            const ids = this.warIds.filter(id => !this.ignoreWarIds.includes(id));
+            this.progress = { done: 0, total: ids.length, running: ids.length > 0 };
+            for (let i = 0; i < ids.length; i++) {
+                if (run !== this.runId) return; // a newer run (or reload) took over
+                if (this.ignoreWarIds.includes(ids[i])) { this.progress.done++; continue; }
+                await this.getAttackableById(ids[i]);
+                if (run !== this.runId) return;
+                this.progress.done++;
+            }
+            this.progress.running = false;
+            this.applySort();
+        },
+        async refresh() {
+            if (!this.apiKey || this.progress.running) return;
+            this.setStatus('Refreshing…', false);
+            await this.getWars(); // re-reads kills/deaths, then re-fetches every guild's members
+        },
+        async getAttackableById(warId) {
+            console.log(`Getting details for ${warId}...`);
+            const currentTime = Math.floor(Date.now() / 1000);
+
+            let guildName = this.procArrays.filter(function(war) {
+                return war.id == warId;
+            })[0];
+            if (!guildName) return;
+
+            let url = `https://api.simple-mmo.com/v1/guilds/members/${warId}?api_key=${encodeURIComponent(this.apiKey)}`;
+            let tooFast = false;
+
+            let postResp;
+            let data;
+            do  {
+                try {
+                    postResp = await apiFetch(url);
+                    if (postResp.status === 429) { console.log('Rate limited, waiting...'); await this.sleep(15000); tooFast = true; continue; }
+                    data = await postResp.json();
+                    tooFast = false;
+                }
+                catch(error){
+                    console.log(error);
+                    await this.sleep(3000);
+                    tooFast = true;
+                }
+            } while(tooFast)
+
+            if (!Array.isArray(data)) {
+                console.log(`Unexpected response for ${warId}`, data);
+                return;
+            }
+
+            let attackable = [];
+            let available = [];
+            let highLevel = 0;
+            let veryHighLevel = 0;
+
+            for(var j = 0; j < data.length; j++) {
+                let player = data[j];
+                player.guildName = guildName.name;
+                if(player.banned == 1 || player.safe_mode == 1) continue;
+
+                if(player.level <= 30) continue;
+
+                if((player.level > 30 && player.level < 100) && (currentTime - player.last_activity) <= 1800) {
+                    continue;
+                }
+
+                attackable.push(player);
+            }
+            for(var j = 0; j < attackable.length; j++) {
+                let player = attackable[j];
+
+                let curHp = (player.current_hp / player.max_hp)*100;
+                if(curHp >= 50 && player.level <= this.maxLevel) {
+                    if(player.level >= this.myLevel * 0.33 && player.level < this.myLevel * 0.66) {
+                        highLevel += 1;
+                    }
+                    else if(player.level >= this.myLevel * 0.66) {
+                        veryHighLevel += 1;
+                    }
+                    player.hpp_percent = curHp;
+                    player.url = `https://web.simple-mmo.com/user/attack/${player.user_id}?autoclose=1&level=${player.level}`;
+                    available.push(player);
+                    this.allAvail.push(player);
+                    if(this.priorityWarIds.includes(warId) || this.focusWarIds.includes(warId) || this.ignoreWarIds.includes(warId)) {
+                        this.ignoreTargets.push(player.user_id);
+                    }
+                }
+            }
+
+            this.applySort(this.radioVal);
+            for(var j = 0; j < this.wars.length; j++) {
+                if(this.wars[j].id === warId) {
+                    this.wars[j].avail = `${available.length}\/${attackable.length} (${highLevel}/${veryHighLevel})`;
+                    this.wars[j].availCount = available.length;
+                    break;
+                }
+            }
+            this.applyWarSort();
+        },
+
+        applySort() {
+            this.allAvail = this.removeItemsById(this.allAvail, this.fought);
+            // [UNUSED - REVIEW] sortAvailHigh / sortAvailLow (see state section)
+            // this.sortAvailHigh = this.removeItemsById(this.sortAvailHigh, this.fought);
+            // this.sortAvailLow = this.removeItemsById(this.sortAvailLow, this.fought);
+
+            this.allAvail = this.removeItemsById(this.allAvail, this.ignoreTargets);
+            // this.sortAvailHigh = this.removeItemsById(this.sortAvailHigh, this.ignoreTargets);
+            // this.sortAvailLow = this.removeItemsById(this.sortAvailLow, this.ignoreTargets);
+
+            if(this.radioVal == "guild") {
+                this.sortedDisplay = this.allAvail;
+            }
+            // [UNUSED - REVIEW] the By Level radios were removed, so radioVal is always "guild"
+            // else if(this.radioVal == "levelHigh") {
+            //     this.sortedDisplay = this.sortAvailHigh;
+            // }
+            // else if(this.radioVal == "levelLow") {
+            //     this.sortedDisplay = this.sortAvailLow;
+            // }
+
+            this.sortedDisplay = this.sortedDisplay.filter(function(p) {
+                return p.level >= 1 && p.level < 100000;
+            });
+        },
+        // Sort paradigm for the wars table:
+        //  leastKills / mostKills: Priority, then Focus, stay on top (in list order);
+        //                          all remaining guilds sort by our kills.
+        //  mostAvail:  whole list sorted by available count, highest first.
+        //  leastAvail: whole list sorted by available count, lowest first,
+        //              guilds with no availability data (null) always last.
+        applyWarSort() {
+            const mode = this.sortMode;
+            const isNull = (w) => !(w.availCount >= 0);
+            const byOrder = (a, b) => a.originalIndex - b.originalIndex;
+            const arr = [...this.wars];
+
+            if (mode === 'leastKills' || mode === 'mostKills') {
+                const dir = mode === 'leastKills' ? 1 : -1;
+                arr.sort((a, b) => {
+                    const aTop = a.isPriority || a.isFocus;
+                    const bTop = b.isPriority || b.isFocus;
+                    if (aTop && bTop) return byOrder(a, b);
+                    if (aTop) return -1;
+                    if (bTop) return 1;
+                    return (a.kills - b.kills) * dir || byOrder(a, b);
+                });
+            } else {
+                const dir = mode === 'mostAvail' ? -1 : 1;
+                arr.sort((a, b) => {
+                    const an = isNull(a), bn = isNull(b);
+                    if (an && bn) return byOrder(a, b);
+                    if (an) return 1;   // nulls last in both availability sorts
+                    if (bn) return -1;
+                    return (a.availCount - b.availCount) * dir || byOrder(a, b);
+                });
+            }
+            this.wars = arr;
+        },
+        removeItemsById(array1, idsToRemove) {
+            return array1.filter(item => !idsToRemove.includes(item.user_id));
+        }
+
+    }).mount("#gwapp");
+</script>
+</html>
