@@ -789,7 +789,8 @@
                     player.url = `https://web.simple-mmo.com/user/attack/${player.user_id}?autoclose=1&level=${player.level}`;
                     available.push(player);
                     this.allAvail.push(player);
-                    if(this.priorityWarIds.includes(warId) || this.focusWarIds.includes(warId) || this.ignoreWarIds.includes(warId)) {
+                    // Priority and Ignored guild members are kept out of Get Next. Focus guild members are included.
+                    if(this.priorityWarIds.includes(warId) || this.ignoreWarIds.includes(warId)) {
                         this.ignoreTargets.push(player.user_id);
                     }
                 }
