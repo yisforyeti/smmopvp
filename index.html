@@ -81,7 +81,7 @@
 <div class="app">
     <header class="top">
         <div class="links">
-            <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/diamondstore/rewards/energy-points?new_page=true">Refill EP</a>
+            <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/travel?new_page=true">&lt; Travel</a>
             | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
             | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
         </div>
@@ -120,6 +120,20 @@
                 <button class="mini" @click="saveKeyAndLoad()">Save &amp; Load</button>
             </div>
             <div v-if="status" :class="statusIsError ? 'status-err' : 'status-ok'" style="margin-top: 6px; font-size: 14px;">{{status}}</div>
+        </div>
+
+        <div class="card">
+            <div style="font-weight: bold; margin-bottom: 6px;">Target level range</div>
+            <div style="display: flex; gap: 10px;">
+                <label style="flex: 1; margin: 0;">Min level
+                    <input type="text" inputmode="numeric" v-model="levelMin" @input="onLevelChange()" placeholder="Auto (31)" style="margin: 4px 0 0;">
+                </label>
+                <label style="flex: 1; margin: 0;">Max level
+                    <input type="text" inputmode="numeric" v-model="levelMax" @input="onLevelChange()" :placeholder="'Auto (' + maxLevel + ')'" style="margin: 4px 0 0;">
+                </label>
+            </div>
+            <div v-if="levelProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{levelProblem()}}</div>
+            <div style="margin-top: 6px; font-size: 13px; color: #999;">Leave blank for automatic (max = 120% of your level). Applies on the next load or Refresh.</div>
         </div>
 
         <div class="card" v-for="s in sections" :key="s.key">
@@ -267,6 +281,8 @@
         tab: 'members',
         paused: false,
         apiCalls: 0,
+        levelMin: '', // blank = automatic
+        levelMax: '', // blank = automatic
         modalQuery: '',
         progress: { done: 0, total: 0, running: false },
         sortMode: 'leastKills',
@@ -344,6 +360,8 @@
                 if (Array.isArray(s.ignore)) this.ignoreWarIds = s.ignore;
                 if (Array.isArray(s.priority)) this.priorityWarIds = s.priority;
                 if (Array.isArray(s.focus)) this.focusWarIds = s.focus;
+                this.levelMin = s.levelMin == null ? '' : String(s.levelMin);
+                this.levelMax = s.levelMax == null ? '' : String(s.levelMax);
             } catch (e) {
                 console.log('Could not parse saved settings', e);
             }
@@ -355,6 +373,8 @@
                     ignore: this.ignoreWarIds,
                     priority: this.priorityWarIds,
                     focus: this.focusWarIds,
+                    levelMin: this.levelMin,
+                    levelMax: this.levelMax,
                 }));
             } catch (e) {
                 console.log('Could not save to localStorage', e);
@@ -588,7 +608,7 @@
 
             let pool = this.rawWars.map(w => ({
                 ...w,
-                url: `https://web.simple-mmo.com/guilds/view/${w.id}/members?username=&min_level=31&max_level=${this.maxLevel}&role=&attackable=on&online_status=&inactivity_status=&new_page=true`
+                url: `https://web.simple-mmo.com/guilds/view/${w.id}/members?username=&min_level=${this.effMin()}&max_level=${this.effMax()}&role=&attackable=on&online_status=&inactivity_status=&new_page=true`
             }));
             pool.sort((p1, p2) => (p2.kills < p1.kills) ? 1 : (p2.kills > p1.kills) ? -1 : 0);
 
@@ -665,6 +685,34 @@
             this.progress.running = false;
             this.applySort();
         },
+        // ---------- Level range (blank = automatic) ----------
+        customMin() {
+            const v = String(this.levelMin).trim();
+            return /^\d+$/.test(v) ? parseInt(v, 10) : null;
+        },
+        customMax() {
+            const v = String(this.levelMax).trim();
+            return /^\d+$/.test(v) ? parseInt(v, 10) : null;
+        },
+        effMin() { // automatic: level 31+
+            const v = this.customMin();
+            return v !== null ? v : 31;
+        },
+        effMax() { // automatic: 120% of your level
+            const v = this.customMax();
+            return v !== null ? v : this.maxLevel;
+        },
+        levelProblem() {
+            const bad = v => String(v).trim() !== '' && !/^\d+$/.test(String(v).trim());
+            if (bad(this.levelMin) || bad(this.levelMax)) return 'Use whole numbers only - invalid entries are ignored.';
+            const a = this.customMin(), b = this.customMax();
+            if (a !== null && b !== null && a > b) return 'Min level is higher than max level.';
+            return '';
+        },
+        onLevelChange() {
+            this.saveSettings();
+            this.rebuildWars(); // refreshes the guild member links
+        },
         togglePause() {
             this.paused = !this.paused;
             setApiPaused(this.paused);
@@ -718,7 +766,7 @@
                 player.guildId = warId;
                 if(player.banned == 1 || player.safe_mode == 1) continue;
 
-                if(player.level <= 30) continue;
+                if(player.level < this.effMin()) continue;
 
                 if((player.level > 30 && player.level < 100) && (currentTime - player.last_activity) <= 1800) {
                     continue;
@@ -730,7 +778,7 @@
                 let player = attackable[j];
 
                 let curHp = (player.current_hp / player.max_hp)*100;
-                if(curHp >= 50 && player.level <= this.maxLevel) {
+                if(curHp >= 50 && player.level <= this.effMax()) {
                     if(player.level >= this.myLevel * 0.33 && player.level < this.myLevel * 0.66) {
                         highLevel += 1;
                     }
@@ -750,7 +798,6 @@
             this.applySort(this.radioVal);
             for(var j = 0; j < this.wars.length; j++) {
                 if(this.wars[j].id === warId) {
-                    // this.wars[j].avail = `${available.length}\/${attackable.length} (${highLevel}/${veryHighLevel})`;
                     this.wars[j].avail = `${available.length}\/${attackable.length}`;
                     this.wars[j].availCount = available.length;
                     break;
@@ -780,8 +827,9 @@
             //     this.sortedDisplay = this.sortAvailLow;
             // }
 
+            const hasCustomMax = this.customMax() !== null; // a custom max replaces the built-in 100000 display cap
             this.sortedDisplay = this.sortedDisplay.filter(function(p) {
-                return p.level >= 1 && p.level < 100000;
+                return p.level >= 1 && (hasCustomMax || p.level < 100000);
             });
         },
         // Sort paradigm for the wars table:
