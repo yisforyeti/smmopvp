@@ -12,7 +12,9 @@
         .app { max-width: 720px; margin: 0 auto; padding: 8px 12px 110px; }
         a { text-decoration: none; }
         button { margin: 0; }
-        .top { padding: 4px 0 6px; font-size: 14px; }
+        .top { padding: 4px 0 6px; font-size: 14px; display: flex; align-items: center; gap: 10px; }
+        .top .top-main { flex: 1; min-width: 0; }
+        .top .top-icon { width: 64px; height: 64px; flex: 0 0 64px; object-fit: contain; border-radius: 6px; }
         .links { text-align: center; color: #ffcc66; }
         .links a { color: #ffcc66; }
         .stats { text-align: center; margin-top: 6px; padding: 4px; background: rgba(33,33,33,.75); border-radius: 4px; color: #e5e5e5; }
@@ -145,30 +147,34 @@
 <body id="gwapp" @vue:mounted="init()">
 <div class="app">
     <header class="top">
-        <div class="links">
-            <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Return to Travel</a>
-            | <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/diamondstore/rewards/energy-points?new_page=true">Refill EP</a>
-            | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
-            | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
+        <img class="top-icon" src="https://web.simple-mmo.com/img/icons/one/icon719.png" alt="">
+        <div class="top-main">
+            <div class="links">
+                <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Return to Travel</a>
+                | <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/diamondstore/rewards/energy-points?new_page=true">Refill EP</a>
+                | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
+                | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
+            </div>
+            <div class="stats" v-if="profile.id">
+                {{profile.name}}:&nbsp;
+                <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
+                <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
+                <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
+            </div>
+            <div class="loadbar">
+                <span v-if="paused" class="api-paused">⏸ API paused</span>
+                <span v-else-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
+                <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
+                <span v-else>Not loaded</span>
+                <span style="color: #888;">{{version}}</span>
+                <span>API {{apiCalls}}/40 per min</span>
+            </div>
+            <div class="loadbar">
+                <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
+                <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running || paused">Refresh</button>
+            </div>
         </div>
-        <div class="stats" v-if="profile.id">
-            {{profile.name}}:&nbsp;
-            <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
-            <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
-            <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
-        </div>
-        <div class="loadbar">
-            <span v-if="paused" class="api-paused">⏸ API paused</span>
-            <span v-else-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
-            <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
-            <span v-else>Not loaded</span>
-            <span style="color: #888;">{{version}}</span>
-            <span>API {{apiCalls}}/40 per min</span>
-        </div>
-        <div class="loadbar">
-            <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
-            <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running || paused">Refresh</button>
-        </div>
+        <img class="top-icon" src="https://cdn.discordapp.com/app-icons/1244440321098514442/b4e5bb0e40d748df3643fe1ef372ddcd.png?size=64" alt="">
     </header>
 
     <nav class="tabs">
@@ -182,6 +188,7 @@
     <section class="pane pane-setup" v-show="tab === 'setup'">
         <h3 class="pane-title">&#9881;&#65039; Setup</h3>
         <div class="card">
+            <div style="font-weight: bold; margin-bottom: 6px;">Helheim's GPvP Tool</div>
             <div style="font-weight: bold; margin-bottom: 6px;">API Key</div>
             <input :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="Paste your API key" autocomplete="off" @keyup.enter="saveKeyAndLoad()" style="margin-bottom: 8px;" />
             <div style="display: flex; align-items: center; justify-content: space-between;">
