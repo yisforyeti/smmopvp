@@ -12,7 +12,9 @@
         .app { max-width: 720px; margin: 0 auto; padding: 8px 12px 110px; }
         a { text-decoration: none; }
         button { margin: 0; }
-        .top { padding: 4px 0 6px; font-size: 14px; }
+        .top { padding: 4px 0 6px; font-size: 14px; display: flex; align-items: center; gap: 10px; }
+        .top .top-main { flex: 1; min-width: 0; }
+        .top .top-icon { width: 64px; height: 64px; flex: 0 0 64px; object-fit: contain; border-radius: 6px; }
         .links { text-align: center; color: #ffcc66; }
         .links a { color: #ffcc66; }
         .stats { text-align: center; margin-top: 6px; padding: 4px; background: rgba(33,33,33,.75); border-radius: 4px; color: #e5e5e5; }
@@ -42,6 +44,11 @@
         .member .g { color: #ffcc66; flex: 0 0 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .member .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .member .lv { color: #bbb; }
+        .card-title { display: flex; align-items: center; justify-content: space-between; font-weight: bold; margin-bottom: 6px; }
+        .help { position: relative; flex: 0 0 auto; padding: 0 6px; color: #ccc; cursor: help; font-weight: bold; user-select: none; }
+        .help:hover { color: #fff; }
+        .help-tip { display: none; } /* hover tooltip is desktop-only; on mobile the ? opens a modal */
+        .modal.help-modal { height: auto; max-height: 80vh; width: min(420px, calc(100% - 32px)); border-radius: 10px; }
         .empty { color: #888; font-style: italic; padding: 8px 0; }
         .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
         .section-title { font-weight: bold; font-size: 17px; }
@@ -66,6 +73,66 @@
         .modal-foot { display: flex; gap: 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid #2a3340; }
         .modal-foot button { flex: 1; margin: 0; }
         body.modal-open { overflow: hidden; }
+        .sort-radios, .war-table, .desktop-footer, .lv-d, .getnext-desktop { display: none; }
+        .mainbox, .maincol { display: contents; } /* wrappers are invisible on mobile */
+        .pane-title { display: none; margin: 0 0 8px; font-size: 16px; color: #ffcc66; }
+        /* ---------- Desktop / wide: gwp3_old style (sidebar + bordered main box with wars table and members) ---------- */
+        @media (min-width: 701px) {
+            /* all text on the web layout is 14px (the x remove buttons keep their larger glyph) */
+            body, body *:not(.remove-btn) { font-size: 14px !important; }
+            .app { max-width: none; padding: 5px 15px 8px; }
+            .tabs { display: none; }
+            .top { text-align: center; }
+            .top .stats { display: none; } /* shown in the footer, as in gwp3_old */
+            .loadbar { justify-content: center; gap: 20px; }
+
+            .panes { display: flex; gap: 15px; align-items: flex-start; padding-top: 10px; }
+            .pane { display: block !important; /* overrides v-show so every pane is visible */ margin-bottom: 0; }
+            .pane-setup { flex: 0 0 270px; width: 270px; max-height: 98vh; overflow-y: auto; position: sticky; top: 5px;
+                          padding: 10px; border: 2px solid #0088ff; border-radius: 5px; }
+            .pane-setup .pane-title, .pane-wars .pane-title { display: none; }
+            .help-tip { position: absolute; right: 0; top: 26px; width: 230px; padding: 8px 10px; background: #0b1118; border: 1px solid #0088ff;
+                        border-radius: 6px; color: #e5e5e5; font-weight: normal; text-align: left; line-height: 1.35; z-index: 30; }
+            .help:hover .help-tip, .help:focus .help-tip { display: block; }
+            .pane-setup .card { background: none; border-radius: 0; padding: 8px 0 0; margin: 12px 0 0; border-top: 1px solid #444; }
+            .pane-setup .card:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+            .pane-setup input[type="text"], .pane-setup input[type="password"] { margin-bottom: 6px; height: 32px; padding: 4px 8px; }
+            .pane-setup button { padding: 2px 8px; }
+            .pane-setup .guild-item { min-height: 0; padding: 1px 0; border-top: none; }
+            .pane-setup .remove-btn { width: auto; padding: 0 4px; }
+
+            .maincol { display: block; flex: 1; min-width: 0; }
+            .mainbox { display: flex; flex: 1; min-width: 0; gap: 15px; padding: 5px 15px 2px; border: 2px solid #0088ff; border-radius: 5px; }
+            .mainbox .pane { flex: 1; min-width: 0; height: 455px; overflow-y: auto; }
+            .pane-members .pane-title { display: block; font-weight: bold; color: #fff; margin: 0 0 5px; }
+
+            /* wars: radios + table instead of select + cards */
+            .toolbar, .war { display: none; }
+            .sort-radios { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 15px; color: #fff; padding-bottom: 5px; }
+            .sort-radios input { margin: 0; }
+            .sort-radios label { display: inline; margin: 0; }
+            .war-table { display: table; width: 100%; margin: 0; }
+            .war-table td, .war-table th { padding-top: 3px; padding-bottom: 3px; }
+            .war-table tr.priority-guild { background: rgba(255,75,75,.15) !important; }
+            .war-table tr.focus-guild { background: rgba(255,204,102,.15) !important; }
+            .war-table tr.priority-guild td:first-child { border-left: 3px solid #ff4b4b; }
+            .war-table tr.focus-guild td:first-child { border-left: 3px solid #ffcc66; }
+            .war-table tr.ignored-guild td:first-child { border-left: 3px solid #888; }
+
+            /* members: plain link lines "Guild (id) | name (level)" */
+            .member { display: block; min-height: 0; margin: 0; padding: 0; background: none; border-radius: 0; color: var(--primary, #1e88e5); }
+            .member .g, .member .n, .member .lv-d { display: inline; flex: none; overflow: visible; white-space: normal; color: inherit; }
+            .member .g::after { content: " |"; }
+            .member .lv-m { display: none; }
+            .member .lv-d { display: inline; }
+
+            /* Get Next centered under the main box, then links / Get Profile / stats */
+            .getnext { display: none !important; } /* the fixed mobile bar */
+            .getnext-desktop { display: flex; justify-content: center; padding: 10px 0 5px; }
+            .getnext-desktop button { width: 375px; height: 48px; padding: 0; margin: 0; }
+            .desktop-footer { display: flex; flex-direction: column; align-items: center; gap: 5px; padding-bottom: 10px; }
+        }
+        /* ---------- Mobile / narrow: tabs + bottom bar (gwp4 style) ---------- */
         @media (max-width: 700px) {
             :root { --tab-h: calc(62px + env(safe-area-inset-bottom)); }
             .tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; margin: 0; gap: 0; background: #11191f; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); }
@@ -80,28 +147,31 @@
 <body id="gwapp" @vue:mounted="init()">
 <div class="app">
     <header class="top">
-        <div class="links">
-            <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/diamondstore/rewards/energy-points?new_page=true">Refill EP</a>
-            | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
-            | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
-        </div>
-        <div class="stats" v-if="profile.id">
-            {{profile.name}}:&nbsp;
-            <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
-            <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
-            <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
-        </div>
-        <div class="loadbar">
-            <span v-if="paused" class="api-paused">⏸ API paused</span>
-            <span v-else-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
-            <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
-            <span v-else>Not loaded</span>
-            <span style="color: #888;">{{version}}</span>
-            <span>API {{apiCalls}}/40 per min</span>
-        </div>
-        <div class="loadbar">
-            <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
-            <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running || paused">Refresh</button>
+        <div class="top-main">
+            <div class="links">
+                <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Return to Travel</a>
+                | <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/diamondstore/rewards/energy-points?new_page=true">Refill EP</a>
+                | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
+                | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
+            </div>
+            <div class="stats" v-if="profile.id">
+                {{profile.name}}:&nbsp;
+                <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
+                <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
+                <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
+            </div>
+            <div class="loadbar">
+                <span v-if="paused" class="api-paused">⏸ API paused</span>
+                <span v-else-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
+                <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
+                <span v-else>Not loaded</span>
+                <span style="color: #888;">{{version}}</span>
+                <span>API {{apiCalls}}/40 per min</span>
+            </div>
+            <div class="loadbar">
+                <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
+                <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running || paused">Refresh</button>
+            </div>
         </div>
     </header>
 
@@ -112,8 +182,11 @@
     </nav>
 
     <!-- ============ SETUP ============ -->
-    <section v-show="tab === 'setup'">
+    <div class="panes">
+    <section class="pane pane-setup" v-show="tab === 'setup'">
+        <h3 class="pane-title">&#9881;&#65039; Setup</h3>
         <div class="card">
+            <div style="font-weight: bold; margin-bottom: 6px;">Helheim's GPvP Tool</div>
             <div style="font-weight: bold; margin-bottom: 6px;">API Key</div>
             <input :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="Paste your API key" autocomplete="off" @keyup.enter="saveKeyAndLoad()" style="margin-bottom: 8px;" />
             <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -124,7 +197,7 @@
         </div>
 
         <div class="card">
-            <div style="font-weight: bold; margin-bottom: 6px;">Target level range</div>
+            <div class="card-title"><span>Target level range</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Target level range', helpTexts.level)">?<span class="help-tip">{{helpTexts.level}}</span></span></div>
             <div style="display: flex; gap: 10px;">
                 <label style="flex: 1; margin: 0;">Min level
                     <input type="text" inputmode="numeric" v-model="levelMin" @input="onLevelChange()" placeholder="Auto (31)" style="margin: 4px 0 0;">
@@ -134,7 +207,17 @@
                 </label>
             </div>
             <div v-if="levelProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{levelProblem()}}</div>
-            <div style="margin-top: 6px; font-size: 13px; color: #999;">Leave blank for automatic (max = 120% of your level). Applies on the next load or Refresh.</div>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span>Ignore wars by our kills</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Ignore wars by our kills', helpTexts.ignore)">?<span class="help-tip">{{helpTexts.ignore}}</span></span></div>
+            <label style="margin: 0;">Ignore wars above
+                <input type="text" inputmode="numeric" v-model="ignoreAbove" @input="onIgnoreChange()" placeholder="Off" style="margin: 4px 0 0;">
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; margin: 8px 0 0;">
+                <input type="checkbox" v-model="hideAbove" @change="onIgnoreChange()" style="margin: 0;"> Hide the wars above
+            </label>
+            <div v-if="ignoreProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{ignoreProblem()}}</div>
         </div>
 
         <div class="card" v-for="s in sections" :key="s.key">
@@ -152,7 +235,17 @@
     </section>
 
     <!-- ============ WARS ============ -->
-    <section v-show="tab === 'wars'">
+    <div class="maincol">
+    <div class="mainbox">
+    <section class="pane pane-wars" v-show="tab === 'wars'">
+        <h3 class="pane-title">&#9876;&#65039; Wars</h3>
+        <div class="sort-radios">
+            <span style="font-weight: bold;">Sort:</span>
+            <div v-for="opt in sortOptions" :key="opt.value">
+                <input type="radio" name="warSort" :id="'warSort_' + opt.value" :value="opt.value" v-model="sortMode" @change="applyWarSort(); saveUi()">
+                <label :for="'warSort_' + opt.value">{{opt.label}}</label>
+            </div>
+        </div>
         <div class="toolbar">
             <span style="font-weight: bold;">Sort</span>
             <select v-model="sortMode" @change="applyWarSort(); saveUi()">
@@ -163,6 +256,24 @@
             </select>
         </div>
         <div v-if="wars.length === 0" class="empty">No wars loaded yet. Go to Setup and Save &amp; Load.</div>
+        <table class="war-table" role="grid">
+            <thead>
+                <tr><th scope="col">Guild</th><th scope="col">Avail</th><th scope="col">Our Kills</th><th scope="col">Our Deaths</th></tr>
+            </thead>
+            <tbody>
+                <tr v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+                    <td>
+                        <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
+                        <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
+                        <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
+                        <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
+                    </td>
+                    <td><a href="#" title="Click to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a></td>
+                    <td>{{item.kills}}</td>
+                    <td>{{item.deaths}}</td>
+                </tr>
+            </tbody>
+        </table>
         <div class="war" v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
             <div class="war-main">
                 <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
@@ -179,18 +290,49 @@
     </section>
 
     <!-- ============ MEMBERS ============ -->
-    <section v-show="tab === 'members'">
+    <section class="pane pane-members" v-show="tab === 'members'">
+        <h3 class="pane-title">&#128101; Guild Members</h3>
         <div v-if="sortedDisplay.length === 0" class="empty">No targets yet. Load your wars in Setup, then wait for guilds to finish loading.</div>
         <a class="member" v-for="item in sortedDisplay" :key="item.user_id" :href="item.url" target="_blank" @click="markFought(item.user_id)">
             <span class="g">{{item.guildName}} ({{item.guildId}})</span>
             <span class="n">{{item.name}}</span>
-            <span class="lv">Lv {{item.level}}</span>
+            <span class="lv lv-m">Lv {{item.level}}</span>
+            <span class="lv-d">({{item.level}})</span>
         </a>
     </section>
+    </div>
+    <div class="getnext-desktop">
+        <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+    </div>
+    <div class="desktop-footer">
+        <div class="links">
+            <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Return to Travel</a>
+            | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
+            | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
+        </div>
+        <button class="mini" @click="getProfile()" style="width: 200px; padding: 0;">Get Profile</button>
+        <div class="stats" v-if="profile.id">
+            {{profile.name}}:&nbsp;
+            <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
+            <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
+            <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
+        </div>
+    </div>
+    </div>
+    </div>
 </div>
 
 <div class="getnext" v-show="tab !== 'setup'">
     <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+</div>
+
+<!-- ============ HELP MODAL (mobile: tap the ?) ============ -->
+<div class="modal-backdrop" v-if="helpText" @click.self="closeHelp()">
+    <div class="modal help-modal" role="dialog">
+        <div class="modal-head"><div class="modal-title" style="margin: 0;">{{helpTitle}}</div></div>
+        <div class="modal-body" style="padding: 12px; flex: 0 1 auto;">{{helpText}}</div>
+        <div class="modal-foot"><button @click="closeHelp()">Close</button></div>
+    </div>
 </div>
 
 <!-- ============ ASSIGN MODAL ============ -->
@@ -219,7 +361,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v0.4.4'; // bump this when you ship a change
+    const VERSION = 'v5.3.1'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const FOUGHT_KEY = 'gwp4.fought'; // only ids of players you already attacked - never API results
@@ -286,6 +428,14 @@
         apiCalls: 0,
         levelMin: '', // blank = automatic
         levelMax: '', // blank = automatic
+        ignoreAbove: '', // ignore wars with our kills above this (blank = off)
+        hideAbove: false, // also hide the wars above the limit from the Wars list
+        helpTitle: '',
+        helpText: '',
+        helpTexts: {
+            level: 'Leave blank for automatic (max = 120% of your level). Applies on the next load or Refresh.',
+            ignore: 'Wars where our kills are above this number are treated as ignored, including Priority and Focus guilds. Tick "Hide the wars above" to also remove them from the Wars list. Blank = off.',
+        },
         modalQuery: '',
         progress: { done: 0, total: 0, running: false },
         sortMode: 'leastKills',
@@ -299,9 +449,46 @@
         // guildLimit: 39,
 
         // ---------- Guild lists (loaded from localStorage on init) ----------
-        ignoreWarIds: [],
-        priorityWarIds: [],
-        focusWarIds: [],
+        ignoreWarIds: [
+            3452, //The Rain Factory
+            2836, //The Scarlet Legion
+            243, //The WolfPack
+            474, //The Forest
+            4134, //Umbral
+            3812, //Coven
+        ],
+        priorityWarIds: [
+            3994, //The Cult of SV
+            4276, //Eternal Gladiators
+            3212, //Shadow Garden
+            607, //The Knights Who Say Yee
+            2874, //The Blazing Beasts
+            4250, //SOLO
+            574, //Golden Arrows
+            3009, //Demolitions Great Kingdom
+            2089, //Prostor
+            3342, //[Slums] Guild
+        ],
+        focusWarIds: [
+            1833, //The Lost Crusade
+            1873, //The Asylum
+            3348, //afterlow
+            2700, //The Fallen
+            518, //Gloryindo
+            2943, //Old elfs
+            3418, //Ego
+            4532, //Sumbosia
+            346, //Abyss
+            424, //Knights of the Internet
+            372, //Dread Pirate's Cove
+            2596, //The Pearly Gates
+            2708, //The Bear Tribe
+            493, //Limited Edition
+            1518, //Indonesian Trade Association
+            427, //UwU
+            43, //The MerryMen of SMMO
+            3928, //Spontaneous Runners
+        ],
 
         sections: [
             { key: 'ignore',   label: 'Ignored',  color: '#aaaaaa' },
@@ -340,6 +527,7 @@
         async init() {
             try { localStorage.removeItem('gwp4.cache'); } catch (e) {} // old cache from an earlier build
             this.loadSettings();
+            this.saveSettings(); // persist built-in defaults on first open
             this.loadUi();
             this.startProfile();
             setInterval(() => { this.apiCalls = recentCalls(); }, 1000);
@@ -365,6 +553,8 @@
                 if (Array.isArray(s.focus)) this.focusWarIds = s.focus;
                 this.levelMin = s.levelMin == null ? '' : String(s.levelMin);
                 this.levelMax = s.levelMax == null ? '' : String(s.levelMax);
+                this.ignoreAbove = s.ignoreAbove == null ? '' : String(s.ignoreAbove);
+                this.hideAbove = s.hideAbove === true;
             } catch (e) {
                 console.log('Could not parse saved settings', e);
             }
@@ -378,6 +568,8 @@
                     focus: this.focusWarIds,
                     levelMin: this.levelMin,
                     levelMax: this.levelMax,
+                    ignoreAbove: this.ignoreAbove,
+                    hideAbove: this.hideAbove,
                 }));
             } catch (e) {
                 console.log('Could not save to localStorage', e);
@@ -629,20 +821,20 @@
             this.procArrays = priorityWars.concat(focusWars, pool);
             this.warIds = this.procArrays.map(x => x.id);
 
-            this.wars = this.procArrays.map((item, idx) => {
+            this.wars = this.procArrays.filter(item => !(this.hideAbove && this.isAutoIgnored(item.id))).map((item, idx) => {
                 const old = prev[item.id];
                 return {
                     id: item.id,
                     url: item.url,
                     name: item.name,
-                    avail: old ? old.avail : '...',
-                    availCount: old ? old.availCount : -1,
+                    avail: this.isAutoIgnored(item.id) ? 'ignored' : (old && old.avail !== 'ignored' ? old.avail : '...'),
+                    availCount: (old && old.avail !== 'ignored' && !this.isAutoIgnored(item.id)) ? old.availCount : -1,
                     originalIndex: idx,
                     kills: item.kills,
                     deaths: item.deaths,
                     isPriority: this.priorityWarIds.includes(item.id),
                     isFocus: this.focusWarIds.includes(item.id),
-                    isIgnored: this.ignoreWarIds.includes(item.id),
+                    isIgnored: this.isIgnoredId(item.id),
                 };
             });
 
@@ -676,11 +868,11 @@
             this.allAvail = [];
             this.ignoreTargets = [-1];
             this.applySort();
-            const ids = this.warIds.filter(id => !this.ignoreWarIds.includes(id));
+            const ids = this.warIds.filter(id => !this.isIgnoredId(id));
             this.progress = { done: 0, total: ids.length, running: ids.length > 0 };
             for (let i = 0; i < ids.length; i++) {
                 if (run !== this.runId) return; // a newer run (or reload) took over
-                if (this.ignoreWarIds.includes(ids[i])) { this.progress.done++; continue; }
+                if (this.isIgnoredId(ids[i])) { this.progress.done++; continue; }
                 await this.getAttackableById(ids[i]);
                 if (run !== this.runId) return;
                 this.progress.done++;
@@ -716,6 +908,35 @@
             this.saveSettings();
             this.rebuildWars(); // refreshes the guild member links
         },
+        // ---------- Ignore wars by our kills (blank = off; applies to every war, Priority/Focus included) ----------
+        customAbove() {
+            const v = String(this.ignoreAbove).trim();
+            return /^\d+$/.test(v) ? parseInt(v, 10) : null;
+        },
+        isAutoIgnored(id) { // our kills above the limit
+            const a = this.customAbove();
+            if (a === null) return false;
+            const w = this.rawWars.find(x => x.id === id);
+            return !!w && w.kills > a;
+        },
+        isIgnoredId(id) { // explicit Ignored list OR above the kills limit
+            return this.ignoreWarIds.includes(id) || this.isAutoIgnored(id);
+        },
+        ignoreProblem() {
+            const v = String(this.ignoreAbove).trim();
+            if (v !== '' && !/^\d+$/.test(v)) return 'Use whole numbers only - invalid entries are ignored.';
+            return '';
+        },
+        onIgnoreChange() {
+            this.saveSettings();
+            this.rebuildWars(); // updates the IGNORED badges and hides/shows wars
+            this.applySort();   // drops (or restores) members of affected guilds right away
+        },
+        // ---------- Help (? icon): tooltip on desktop via CSS, modal on mobile ----------
+        openHelp(title, text) {
+            if (window.matchMedia('(max-width: 700px)').matches) { this.helpTitle = title; this.helpText = text; }
+        },
+        closeHelp() { this.helpText = ''; this.helpTitle = ''; },
         togglePause() {
             this.paused = !this.paused;
             setApiPaused(this.paused);
@@ -733,6 +954,7 @@
                 return war.id == warId;
             })[0];
             if (!guildName) return;
+            if (this.isAutoIgnored(warId)) return; // out of the kills range: don't fetch its members
 
             let url = `https://api.simple-mmo.com/v1/guilds/members/${warId}?api_key=${encodeURIComponent(this.apiKey)}`;
             let tooFast = false;
@@ -832,9 +1054,8 @@
             // }
 
             const hasCustomMax = this.customMax() !== null; // a custom max replaces the built-in 100000 display cap
-            this.sortedDisplay = this.sortedDisplay.filter(function(p) {
-                return p.level >= 1 && (hasCustomMax || p.level < 100000);
-            });
+            this.sortedDisplay = this.sortedDisplay.filter(p =>
+                p.level >= 1 && (hasCustomMax || p.level < 100000) && !this.isAutoIgnored(p.guildId));
         },
         // Sort paradigm for the wars table:
         //  leastKills / mostKills: Priority, then Focus, stay on top (in list order);
