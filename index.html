@@ -186,7 +186,11 @@
     <section class="pane pane-setup" v-show="tab === 'setup'">
         <h3 class="pane-title">&#9881;&#65039; Setup</h3>
         <div class="card">
-            <div style="font-weight: bold; margin-bottom: 6px;">Helheim's GPvP Tool</div>
+            <div style="font-weight: bold; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                <img src="https://web.simple-mmo.com/img/icons/one/icon719.png" alt="Helheim">
+                <span style="text-align: center;">Helheim's GPvP Tool</span>
+                <img src="https://cdn.discordapp.com/app-icons/1244440321098514442/b4e5bb0e40d748df3643fe1ef372ddcd.png?size=32" alt="Hedgebot">
+            </div>
             <div style="font-weight: bold; margin-bottom: 6px;">API Key</div>
             <input :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="Paste your API key" autocomplete="off" @keyup.enter="saveKeyAndLoad()" style="margin-bottom: 8px;" />
             <div style="display: flex; align-items: center; justify-content: space-between;">
