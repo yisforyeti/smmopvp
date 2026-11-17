@@ -141,11 +141,22 @@
             .modal { width: 100%; height: 100%; height: 100dvh; border-radius: 0; }
         }
     </style>
+    <style>
+        .denied { display: flex; align-items: center; justify-content: center; min-height: 100vh; min-height: 100dvh; padding: 20px; box-sizing: border-box; }
+        .denied-box { max-width: 420px; text-align: center; padding: 24px; border: 1px solid #ff7777; border-radius: 8px; color: #ff7777; font-size: 18px; }
+        .denied-title { font-weight: bold; font-size: 22px; margin-bottom: 8px; }
+    </style>
     <script src="https://unpkg.com/petite-vue"></script>
 </head>
 
 <body id="gwapp" @vue:mounted="init()">
-<div class="app">
+<div class="denied" v-if="denied">
+    <div class="denied-box">
+        <div class="denied-title">&#128274; Access denied</div>
+        <div>This app is meant for Helheim Use Only.</div>
+    </div>
+</div>
+<div class="app" v-if="!denied">
     <header class="top">
         <div class="top-main">
             <div class="links">
@@ -328,7 +339,7 @@
     </div>
 </div>
 
-<div class="getnext" v-show="tab !== 'setup'">
+<div class="getnext" v-show="tab !== 'setup' && !denied">
     <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
 </div>
 
@@ -367,7 +378,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.3.1'; // bump this when you ship a change
+    const VERSION = 'v5.4.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const FOUGHT_KEY = 'gwp4.fought'; // only ids of players you already attacked - never API results
@@ -390,7 +401,7 @@
         apiPaused = v;
         if (!v) { pauseWaiters.forEach(r => r()); pauseWaiters = []; }
     }
-    function apiFetch(url) {
+    function apiFetch(url, opts) {
         const run = apiChain.then(async () => {
             while (apiPaused) await new Promise(r => pauseWaiters.push(r));
             const wait = lastApiCall + API_GAP_MS - Date.now();
@@ -398,12 +409,18 @@
             while (apiPaused) await new Promise(r => pauseWaiters.push(r)); // paused during the gap wait
             lastApiCall = Date.now();
             apiTimes.push(lastApiCall);
-            return fetch(url, { method: 'POST' });
+            return fetch(url, opts || { method: 'POST' });
         });
         apiChain = run.catch(() => {});
         return run;
     }
     const MY_GUILD_ID = 674;
+
+    // Helheim-only access: allowed if the player is in guild MY_GUILD_ID *or* their player ID is in this list.
+    // Add the ID of anyone outside the guild who should have access.
+    const ALLOWED_USER_IDS = [
+        1289208
+    ];
 
     // Used to show a friendly name for guilds that are in a list but not currently at war
     const DEFAULT_NAMES = {
@@ -426,6 +443,7 @@
         statusIsError: false,
 
         profile: {},
+        denied: false,
         wars: [],
         rawWars: [],
         tab: 'members',
@@ -741,7 +759,7 @@
         async startProfile() {
             if(!this.profileInterval) {
                 this.profileInterval = setInterval(() => {
-                    if (this.apiKey && !this.paused) this.getProfile();
+                    if (this.apiKey && !this.paused && !this.denied) this.getProfile();
                 }, 30 * 1000);
             }
         },
@@ -772,8 +790,38 @@
                 return false;
             }
         },
+        // Runs the v2 "me" profile and checks guild + allowed user list. Returns true only if allowed.
+        async checkAccess() {
+            console.log("Checking access...");
+            try {
+                const url = `https://api.simple-mmo.com/v2/player/me?api_key=${encodeURIComponent(this.apiKey)}`;
+                const resp = await apiFetch(url); // POST + api_key, same as the other calls
+                const me = await resp.json();
+                if (!me || me.id === undefined) {
+                    this.setStatus('Could not verify your profile - check your API key.', true);
+                    return false;
+                }
+                const inGuild = !!(me.guild && Number(me.guild.id) === MY_GUILD_ID);
+                const listed = ALLOWED_USER_IDS.map(Number).includes(Number(me.id));
+                if (!inGuild && !listed) {
+                    this.denied = true;
+                    this.wars = [];
+                    this.rawWars = [];
+                    this.sortedDisplay = [];
+                    this.runId++; // cancel any in-flight getAttackable loop
+                    return false;
+                }
+                this.denied = false;
+                return true;
+            } catch (e) {
+                console.log(e);
+                this.setStatus('Could not verify your profile (network error).', true);
+                return false;
+            }
+        },
         async getWars() {
             console.log("Getting Wars...");
+            if (!(await this.checkAccess())) return;
             try {
                 let url = `https://api.simple-mmo.com/v1/guilds/wars/${MY_GUILD_ID}/1?api_key=${encodeURIComponent(this.apiKey)}`;
                 let postResp = await apiFetch(url);
