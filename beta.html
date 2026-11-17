@@ -51,13 +51,18 @@
         .modal.help-modal { height: auto; max-height: 80vh; width: min(420px, calc(100% - 32px)); border-radius: 10px; }
         .empty { color: #888; font-style: italic; padding: 8px 0; }
         .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-        .section-title { font-weight: bold; font-size: 17px; }
+        .section-title { display: block; flex: 1; text-align: left; font-weight: bold; font-size: 17px; cursor: pointer; user-select: none; padding: 6px 0; margin: 0; background: none; border: 0; border-radius: 0; box-shadow: none; outline: none; -webkit-appearance: none; appearance: none; -webkit-tap-highlight-color: transparent; }
+        .section-title:hover, .section-title:focus, .section-title:active, .section-title:focus-visible { background: none; outline: none; box-shadow: none; }
+        .section-title .chev { display: inline-block; width: 1em; margin-right: 2px; font-size: 14px; }
         .guild-item { display: flex; justify-content: space-between; align-items: center; min-height: 40px; border-top: 1px solid #2a3340; }
         .guild-item a { color: #ddd; }
         .remove-btn { background: none; border: none; color: #ff7777; font-size: 22px; width: 44px; padding: 0; }
         .status-err { color: #ff7777; } .status-ok { color: #7fdc7f; }
         .getnext { position: fixed; left: 0; right: 0; bottom: var(--tab-h); z-index: 15; padding: 8px 12px; background: linear-gradient(rgba(17,25,31,0), #11191f 40%); }
-        .getnext button { display: block; width: 100%; max-width: 720px; margin: 0 auto; height: 52px; font-size: 18px; }
+        .getnext-row { display: flex; gap: 8px; max-width: 720px; margin: 0 auto; }
+        .getnext button { height: 52px; font-size: 18px; margin: 0; }
+        .getnext .gn-main { flex: 1; min-width: 0; }
+        .getnext .gn-skip { flex: 0 0 110px; padding: 0; }
         .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; }
         .modal { background: #1b2430; width: min(560px, 100%); height: min(80vh, 720px); display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; }
         .modal-head { padding: 12px; border-bottom: 1px solid #2a3340; }
@@ -128,8 +133,9 @@
 
             /* Get Next centered under the main box, then links / Get Profile / stats */
             .getnext { display: none !important; } /* the fixed mobile bar */
-            .getnext-desktop { display: flex; justify-content: center; padding: 10px 0 5px; }
+            .getnext-desktop { display: flex; justify-content: center; gap: 8px; padding: 10px 0 5px; }
             .getnext-desktop button { width: 375px; height: 48px; padding: 0; margin: 0; }
+            .getnext-desktop button.gn-skip { width: 130px; }
             .desktop-footer { display: flex; flex-direction: column; align-items: center; gap: 5px; padding-bottom: 10px; }
         }
         /* ---------- Mobile / narrow: tabs + bottom bar (gwp4 style) ---------- */
@@ -236,14 +242,16 @@
             </div>
 
             <div class="card" v-for="s in sections" :key="s.key">
-                <div class="section-head">
-                    <span class="section-title" :style="{color: s.color}">{{s.label}} ({{listFor(s.key).length}})</span>
+                <div class="section-head" :style="{marginBottom: collapsed[s.key] ? '0' : ''}">
+                    <span class="section-title" :style="{color: s.color}" role="button" tabindex="0" :aria-expanded="!collapsed[s.key]" @click="toggleSection(s.key)" @keyup.enter="toggleSection(s.key)"><span class="chev">{{collapsed[s.key] ? '\u25B8\uFE0E' : '\u25BE\uFE0E'}}</span>{{s.label}} ({{listFor(s.key).length}})</span>
                     <button class="mini" @click="startAssign(s.key)" :disabled="wars.length === 0">Assign…</button>
                 </div>
-                <div v-if="listFor(s.key).length === 0" class="empty">None</div>
-                <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
-                    <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}} ({{gid}})<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
-                    <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
+                <div v-show="!collapsed[s.key]">
+                    <div v-if="listFor(s.key).length === 0" class="empty">None</div>
+                    <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
+                        <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}} ({{gid}})<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
+                        <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
+                    </div>
                 </div>
             </div>
             <div v-if="wars.length === 0" class="empty">Save &amp; Load your API key to enable Assign.</div>
@@ -320,6 +328,7 @@
             <!-- ============ Desktop footer ============ -->
             <div class="getnext-desktop">
                 <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+                <button class="secondary gn-skip" @click="skipGuild()" :disabled="sortedDisplay.length === 0" :title="sortedDisplay.length ? 'Remove everyone in ' + sortedDisplay[0].guildName + ' from Get Next' : ''">Skip Guild</button>
             </div>
             <div class="desktop-footer">
                 <div class="links">
@@ -340,7 +349,10 @@
 </div>
 
 <div class="getnext" v-show="tab !== 'setup' && !denied">
-    <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+    <div class="getnext-row">
+        <button class="gn-main" @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+        <button class="secondary gn-skip" @click="skipGuild()" :disabled="sortedDisplay.length === 0">Skip Guild</button>
+    </div>
 </div>
 
 <!-- ============ HELP MODAL (mobile: tap the ?) ============ -->
@@ -378,7 +390,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.4.0'; // bump this when you ship a change
+    const VERSION = 'v5.6.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const FOUGHT_KEY = 'gwp4.fought'; // only ids of players you already attacked - never API results
@@ -419,7 +431,7 @@
     // Helheim-only access: allowed if the player is in guild MY_GUILD_ID *or* their player ID is in this list.
     // Add the ID of anyone outside the guild who should have access.
     const ALLOWED_USER_IDS = [
-        1289208
+        // 7,
     ];
 
     // Used to show a friendly name for guilds that are in a list but not currently at war
@@ -514,6 +526,7 @@
             3928, //Spontaneous Runners
         ],
 
+        collapsed: { ignore: false, priority: false, focus: false }, // Setup section headers (remembered)
         sections: [
             { key: 'ignore',   label: 'Ignored',  color: '#aaaaaa' },
             { key: 'priority', label: 'Priority', color: '#ff4b4b' },
@@ -657,10 +670,17 @@
                 const u = JSON.parse(localStorage.getItem(UI_KEY) || '{}');
                 if (['setup', 'wars', 'members'].includes(u.tab)) this.tab = u.tab;
                 if (this.sortOptions.some(o => o.value === u.sortMode)) this.sortMode = u.sortMode;
+                if (u.collapsed && typeof u.collapsed === 'object') {
+                    this.sections.forEach(sec => { this.collapsed[sec.key] = u.collapsed[sec.key] === true; });
+                }
             } catch (e) { console.log('Could not load UI state', e); }
         },
         saveUi() {
-            try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: this.tab, sortMode: this.sortMode })); } catch (e) {}
+            try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: this.tab, sortMode: this.sortMode, collapsed: this.collapsed })); } catch (e) {}
+        },
+        toggleSection(key) {
+            this.collapsed[key] = !this.collapsed[key];
+            this.saveUi();
         },
         setTab(t) {
             this.tab = t;
@@ -905,6 +925,17 @@
                 window.open(this.sortedDisplay[0].url, '_blank');
                 this.markFought(this.sortedDisplay[0].user_id);
             }
+        },
+        // Removes every player of the current (top) guild from Get Next - handy when they're all dead.
+        // Uses the same "fought" list as Get Next, so it also survives a page reload (until the fought list expires).
+        skipGuild() {
+            if (this.sortedDisplay.length === 0) return;
+            const gid = this.sortedDisplay[0].guildId;
+            this.allAvail.forEach(p => {
+                if (p.guildId === gid && !this.fought.includes(p.user_id)) this.fought.push(p.user_id);
+            });
+            this.applySort();
+            this.saveFought();
         },
         markFought(userId) {
             if (!this.fought.includes(userId)) {
