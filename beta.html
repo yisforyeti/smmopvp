@@ -141,15 +141,26 @@
             .modal { width: 100%; height: 100%; height: 100dvh; border-radius: 0; }
         }
     </style>
+    <style>
+        .denied { display: flex; align-items: center; justify-content: center; min-height: 100vh; min-height: 100dvh; padding: 20px; box-sizing: border-box; }
+        .denied-box { max-width: 420px; text-align: center; padding: 24px; border: 1px solid #ff7777; border-radius: 8px; color: #ff7777; font-size: 18px; }
+        .denied-title { font-weight: bold; font-size: 22px; margin-bottom: 8px; }
+    </style>
     <script src="https://unpkg.com/petite-vue"></script>
 </head>
 
 <body id="gwapp" @vue:mounted="init()">
-<div class="app">
+<div class="denied" v-if="denied">
+    <div class="denied-box">
+        <div class="denied-title">&#128274; Access denied</div>
+        <div>This app is meant for Helheim Use Only.</div>
+    </div>
+</div>
+<div class="app" v-if="!denied">
     <header class="top">
         <div class="top-main">
             <div class="links">
-                <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Return to Travel</a>
+                <a target="_blank" href="https://web.simple-mmo.com/bank?new_page=true">Bank</a>
                 | <a target="_blank" rel="noopener" href="https://web.simple-mmo.com/diamondstore/rewards/energy-points?new_page=true">Refill EP</a>
                 | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
                 | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
@@ -183,146 +194,152 @@
 
     <!-- ============ SETUP ============ -->
     <div class="panes">
-    <section class="pane pane-setup" v-show="tab === 'setup'">
-        <h3 class="pane-title">&#9881;&#65039; Setup</h3>
-        <div class="card">
-            <div style="font-weight: bold; margin-bottom: 6px;">Helheim's GPvP Tool</div>
-            <div style="font-weight: bold; margin-bottom: 6px;">API Key</div>
-            <input :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="Paste your API key" autocomplete="off" @keyup.enter="saveKeyAndLoad()" style="margin-bottom: 8px;" />
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-                <label style="margin: 0;"><input type="checkbox" v-model="showKey" style="margin: 0 6px 0 0;"> Show</label>
-                <button class="mini" @click="saveKeyAndLoad()">Save &amp; Load</button>
+        <section class="pane pane-setup" v-show="tab === 'setup'">
+            <h3 class="pane-title">&#9881;&#65039; Setup</h3>
+            <div class="card">
+                <div style="font-weight: bold; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                    <img src="https://web.simple-mmo.com/img/icons/one/icon719.png" alt="Helheim">
+                    <span style="text-align: center;">Helheim's GPvP Tool</span>
+                    <img src="https://cdn.discordapp.com/app-icons/1244440321098514442/b4e5bb0e40d748df3643fe1ef372ddcd.png?size=32" alt="Hedgebot">
+                </div>
+                <div style="font-weight: bold; margin-bottom: 6px;">API Key</div>
+                <input :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="Paste your API key" autocomplete="off" @keyup.enter="saveKeyAndLoad()" style="margin-bottom: 8px;" />
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <label style="margin: 0;"><input type="checkbox" v-model="showKey" style="margin: 0 6px 0 0;"> Show</label>
+                    <button class="mini" @click="saveKeyAndLoad()">Save &amp; Load</button>
+                </div>
+                <div v-if="status" :class="statusIsError ? 'status-err' : 'status-ok'" style="margin-top: 6px; font-size: 14px;">{{status}}</div>
             </div>
-            <div v-if="status" :class="statusIsError ? 'status-err' : 'status-ok'" style="margin-top: 6px; font-size: 14px;">{{status}}</div>
-        </div>
 
-        <div class="card">
-            <div class="card-title"><span>Target level range</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Target level range', helpTexts.level)">?<span class="help-tip">{{helpTexts.level}}</span></span></div>
-            <div style="display: flex; gap: 10px;">
-                <label style="flex: 1; margin: 0;">Min level
-                    <input type="text" inputmode="numeric" v-model="levelMin" @input="onLevelChange()" placeholder="Auto (31)" style="margin: 4px 0 0;">
+            <div class="card">
+                <div class="card-title"><span>Target level range</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Target level range', helpTexts.level)">?<span class="help-tip">{{helpTexts.level}}</span></span></div>
+                <div style="display: flex; gap: 10px;">
+                    <label style="flex: 1; margin: 0;">Min level
+                        <input type="text" inputmode="numeric" v-model="levelMin" @input="onLevelChange()" placeholder="Auto (31)" style="margin: 4px 0 0;">
+                    </label>
+                    <label style="flex: 1; margin: 0;">Max level
+                        <input type="text" inputmode="numeric" v-model="levelMax" @input="onLevelChange()" :placeholder="'Auto (' + maxLevel + ')'" style="margin: 4px 0 0;">
+                    </label>
+                </div>
+                <div v-if="levelProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{levelProblem()}}</div>
+            </div>
+
+            <div class="card">
+                <div class="card-title"><span>Ignore wars by our kills</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Ignore wars by our kills', helpTexts.ignore)">?<span class="help-tip">{{helpTexts.ignore}}</span></span></div>
+                <label style="margin: 0;">Ignore wars above
+                    <input type="text" inputmode="numeric" v-model="ignoreAbove" @input="onIgnoreChange()" placeholder="Off" style="margin: 4px 0 0;">
                 </label>
-                <label style="flex: 1; margin: 0;">Max level
-                    <input type="text" inputmode="numeric" v-model="levelMax" @input="onLevelChange()" :placeholder="'Auto (' + maxLevel + ')'" style="margin: 4px 0 0;">
+                <label style="display: flex; align-items: center; gap: 6px; margin: 8px 0 0;">
+                    <input type="checkbox" v-model="hideAbove" @change="onIgnoreChange()" style="margin: 0;"> Hide the wars above
                 </label>
+                <div v-if="ignoreProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{ignoreProblem()}}</div>
             </div>
-            <div v-if="levelProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{levelProblem()}}</div>
-        </div>
 
-        <div class="card">
-            <div class="card-title"><span>Ignore wars by our kills</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Ignore wars by our kills', helpTexts.ignore)">?<span class="help-tip">{{helpTexts.ignore}}</span></span></div>
-            <label style="margin: 0;">Ignore wars above
-                <input type="text" inputmode="numeric" v-model="ignoreAbove" @input="onIgnoreChange()" placeholder="Off" style="margin: 4px 0 0;">
-            </label>
-            <label style="display: flex; align-items: center; gap: 6px; margin: 8px 0 0;">
-                <input type="checkbox" v-model="hideAbove" @change="onIgnoreChange()" style="margin: 0;"> Hide the wars above
-            </label>
-            <div v-if="ignoreProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{ignoreProblem()}}</div>
-        </div>
+            <div class="card" v-for="s in sections" :key="s.key">
+                <div class="section-head">
+                    <span class="section-title" :style="{color: s.color}">{{s.label}} ({{listFor(s.key).length}})</span>
+                    <button class="mini" @click="startAssign(s.key)" :disabled="wars.length === 0">Assign…</button>
+                </div>
+                <div v-if="listFor(s.key).length === 0" class="empty">None</div>
+                <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
+                    <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}} ({{gid}})<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
+                    <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
+                </div>
+            </div>
+            <div v-if="wars.length === 0" class="empty">Save &amp; Load your API key to enable Assign.</div>
+        </section>
 
-        <div class="card" v-for="s in sections" :key="s.key">
-            <div class="section-head">
-                <span class="section-title" :style="{color: s.color}">{{s.label}} ({{listFor(s.key).length}})</span>
-                <button class="mini" @click="startAssign(s.key)" :disabled="wars.length === 0">Assign…</button>
-            </div>
-            <div v-if="listFor(s.key).length === 0" class="empty">None</div>
-            <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
-                <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}} ({{gid}})<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
-                <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
-            </div>
-        </div>
-        <div v-if="wars.length === 0" class="empty">Save &amp; Load your API key to enable Assign.</div>
-    </section>
+        <!-- ============ WARS ============ -->
+        <div class="maincol">
+            <div class="mainbox">
+                <section class="pane pane-wars" v-show="tab === 'wars'">
+                    <h3 class="pane-title">&#9876;&#65039; Wars</h3>
+                    <div class="sort-radios">
+                        <span style="font-weight: bold;">Sort:</span>
+                        <div v-for="opt in sortOptions" :key="opt.value">
+                            <input type="radio" name="warSort" :id="'warSort_' + opt.value" :value="opt.value" v-model="sortMode" @change="applyWarSort(); saveUi()">
+                            <label :for="'warSort_' + opt.value">{{opt.label}}</label>
+                        </div>
+                    </div>
+                    <div class="toolbar">
+                        <span style="font-weight: bold;">Sort</span>
+                        <select v-model="sortMode" @change="applyWarSort(); saveUi()">
+                            <option value="leastKills">Least Kills (Priority/Focus on top)</option>
+                            <option value="mostKills">Most Kills (Priority/Focus on top)</option>
+                            <option value="mostAvail">Most Available</option>
+                            <option value="leastAvail">Least Available</option>
+                        </select>
+                    </div>
+                    <div v-if="wars.length === 0" class="empty">No wars loaded yet. Go to Setup and Save &amp; Load.</div>
+                    <table class="war-table" role="grid">
+                        <thead>
+                            <tr><th scope="col">Guild</th><th scope="col">Avail</th><th scope="col">Our Kills</th><th scope="col">Our Deaths</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+                                <td>
+                                    <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
+                                    <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
+                                    <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
+                                    <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
+                                </td>
+                                <td><a href="#" title="Click to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a></td>
+                                <td>{{item.kills}}</td>
+                                <td>{{item.deaths}}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="war" v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+                        <div class="war-main">
+                            <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
+                            <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
+                            <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
+                            <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
+                        </div>
+                        <div class="war-meta">
+                            <a href="#" class="avail" title="Tap to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a>
+                            <span>Kills {{item.kills}}</span>
+                            <span>Deaths {{item.deaths}}</span>
+                        </div>
+                    </div>
+                </section>
 
-    <!-- ============ WARS ============ -->
-    <div class="maincol">
-    <div class="mainbox">
-    <section class="pane pane-wars" v-show="tab === 'wars'">
-        <h3 class="pane-title">&#9876;&#65039; Wars</h3>
-        <div class="sort-radios">
-            <span style="font-weight: bold;">Sort:</span>
-            <div v-for="opt in sortOptions" :key="opt.value">
-                <input type="radio" name="warSort" :id="'warSort_' + opt.value" :value="opt.value" v-model="sortMode" @change="applyWarSort(); saveUi()">
-                <label :for="'warSort_' + opt.value">{{opt.label}}</label>
+                <!-- ============ MEMBERS ============ -->
+                <section class="pane pane-members" v-show="tab === 'members'">
+                    <h3 class="pane-title">&#128101; Guild Members</h3>
+                    <div v-if="sortedDisplay.length === 0" class="empty">No targets yet. Load your wars in Setup, then wait for guilds to finish loading.</div>
+                    <a class="member" v-for="item in sortedDisplay" :key="item.user_id" :href="item.url" target="_blank" @click="markFought(item.user_id)">
+                        <span class="g">{{item.guildName}} ({{item.guildId}})</span>
+                        <span class="n">{{item.name}}</span>
+                        <span class="lv lv-m">Lv {{item.level}}</span>
+                        <span class="lv-d">({{item.level}})</span>
+                    </a>
+                </section>
+            </div>
+        <div style="padding-right: 22%">
+            <!-- ============ Desktop footer ============ -->
+            <div class="getnext-desktop">
+                <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+            </div>
+            <div class="desktop-footer">
+                <div class="links">
+                    <a target="_blank" href="https://web.simple-mmo.com/bank?new_page=true">Bank</a>
+                    | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
+                    | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
+                </div>
+                <button class="mini" @click="getProfile()" style="width: 200px; padding: 0;">Get Profile</button>
+                <div class="stats" v-if="profile.id">
+                    {{profile.name}}:&nbsp;
+                    <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
+                    <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
+                    <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
+                </div>
             </div>
         </div>
-        <div class="toolbar">
-            <span style="font-weight: bold;">Sort</span>
-            <select v-model="sortMode" @change="applyWarSort(); saveUi()">
-                <option value="leastKills">Least Kills (Priority/Focus on top)</option>
-                <option value="mostKills">Most Kills (Priority/Focus on top)</option>
-                <option value="mostAvail">Most Available</option>
-                <option value="leastAvail">Least Available</option>
-            </select>
-        </div>
-        <div v-if="wars.length === 0" class="empty">No wars loaded yet. Go to Setup and Save &amp; Load.</div>
-        <table class="war-table" role="grid">
-            <thead>
-                <tr><th scope="col">Guild</th><th scope="col">Avail</th><th scope="col">Our Kills</th><th scope="col">Our Deaths</th></tr>
-            </thead>
-            <tbody>
-                <tr v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
-                    <td>
-                        <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
-                        <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
-                        <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
-                        <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
-                    </td>
-                    <td><a href="#" title="Click to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a></td>
-                    <td>{{item.kills}}</td>
-                    <td>{{item.deaths}}</td>
-                </tr>
-            </tbody>
-        </table>
-        <div class="war" v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
-            <div class="war-main">
-                <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
-                <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
-                <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
-                <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
-            </div>
-            <div class="war-meta">
-                <a href="#" class="avail" title="Tap to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a>
-                <span>Kills {{item.kills}}</span>
-                <span>Deaths {{item.deaths}}</span>
-            </div>
-        </div>
-    </section>
-
-    <!-- ============ MEMBERS ============ -->
-    <section class="pane pane-members" v-show="tab === 'members'">
-        <h3 class="pane-title">&#128101; Guild Members</h3>
-        <div v-if="sortedDisplay.length === 0" class="empty">No targets yet. Load your wars in Setup, then wait for guilds to finish loading.</div>
-        <a class="member" v-for="item in sortedDisplay" :key="item.user_id" :href="item.url" target="_blank" @click="markFought(item.user_id)">
-            <span class="g">{{item.guildName}} ({{item.guildId}})</span>
-            <span class="n">{{item.name}}</span>
-            <span class="lv lv-m">Lv {{item.level}}</span>
-            <span class="lv-d">({{item.level}})</span>
-        </a>
-    </section>
-    </div>
-    <div class="getnext-desktop">
-        <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
-    </div>
-    <div class="desktop-footer">
-        <div class="links">
-            <a href="https://web.simple-mmo.com/travel?new_page=true">&lt; Return to Travel</a>
-            | <a target="_blank" href="https://web.simple-mmo.com/healer?new_page=true">Folen The Healer</a>
-            | <a target="_blank" href="https://web.simple-mmo.com/inventory/items?type%5B0%5D=Food&order_col=items.stat1modifier&order=desc&page=1">Food</a>
-        </div>
-        <button class="mini" @click="getProfile()" style="width: 200px; padding: 0;">Get Profile</button>
-        <div class="stats" v-if="profile.id">
-            {{profile.name}}:&nbsp;
-            <span class="k"><a href="https://web.simple-mmo.com/quests/viewall" target="_blank">QP</a>:</span> {{profile.qp}} |
-            <span class="k"><a href="https://web.simple-mmo.com/battle/menu" target="_blank">EP</a>:</span> {{profile.ep}} |
-            <span class="k"><a href="https://web.simple-mmo.com/healer?new_page=true" target="_blank">HP</a>:</span> {{profile.hpp}}%
-        </div>
-    </div>
-    </div>
     </div>
 </div>
 
-<div class="getnext" v-show="tab !== 'setup'">
+<div class="getnext" v-show="tab !== 'setup' && !denied">
     <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
 </div>
 
@@ -361,7 +378,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.3.1'; // bump this when you ship a change
+    const VERSION = 'v5.4.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const FOUGHT_KEY = 'gwp4.fought'; // only ids of players you already attacked - never API results
@@ -384,7 +401,7 @@
         apiPaused = v;
         if (!v) { pauseWaiters.forEach(r => r()); pauseWaiters = []; }
     }
-    function apiFetch(url) {
+    function apiFetch(url, opts) {
         const run = apiChain.then(async () => {
             while (apiPaused) await new Promise(r => pauseWaiters.push(r));
             const wait = lastApiCall + API_GAP_MS - Date.now();
@@ -392,12 +409,18 @@
             while (apiPaused) await new Promise(r => pauseWaiters.push(r)); // paused during the gap wait
             lastApiCall = Date.now();
             apiTimes.push(lastApiCall);
-            return fetch(url, { method: 'POST' });
+            return fetch(url, opts || { method: 'POST' });
         });
         apiChain = run.catch(() => {});
         return run;
     }
     const MY_GUILD_ID = 674;
+
+    // Helheim-only access: allowed if the player is in guild MY_GUILD_ID *or* their player ID is in this list.
+    // Add the ID of anyone outside the guild who should have access.
+    const ALLOWED_USER_IDS = [
+        1289208
+    ];
 
     // Used to show a friendly name for guilds that are in a list but not currently at war
     const DEFAULT_NAMES = {
@@ -420,6 +443,7 @@
         statusIsError: false,
 
         profile: {},
+        denied: false,
         wars: [],
         rawWars: [],
         tab: 'members',
@@ -735,7 +759,7 @@
         async startProfile() {
             if(!this.profileInterval) {
                 this.profileInterval = setInterval(() => {
-                    if (this.apiKey && !this.paused) this.getProfile();
+                    if (this.apiKey && !this.paused && !this.denied) this.getProfile();
                 }, 30 * 1000);
             }
         },
@@ -766,8 +790,38 @@
                 return false;
             }
         },
+        // Runs the v2 "me" profile and checks guild + allowed user list. Returns true only if allowed.
+        async checkAccess() {
+            console.log("Checking access...");
+            try {
+                const url = `https://api.simple-mmo.com/v2/player/me?api_key=${encodeURIComponent(this.apiKey)}`;
+                const resp = await apiFetch(url); // POST + api_key, same as the other calls
+                const me = await resp.json();
+                if (!me || me.id === undefined) {
+                    this.setStatus('Could not verify your profile - check your API key.', true);
+                    return false;
+                }
+                const inGuild = !!(me.guild && Number(me.guild.id) === MY_GUILD_ID);
+                const listed = ALLOWED_USER_IDS.map(Number).includes(Number(me.id));
+                if (!inGuild && !listed) {
+                    this.denied = true;
+                    this.wars = [];
+                    this.rawWars = [];
+                    this.sortedDisplay = [];
+                    this.runId++; // cancel any in-flight getAttackable loop
+                    return false;
+                }
+                this.denied = false;
+                return true;
+            } catch (e) {
+                console.log(e);
+                this.setStatus('Could not verify your profile (network error).', true);
+                return false;
+            }
+        },
         async getWars() {
             console.log("Getting Wars...");
+            if (!(await this.checkAccess())) return;
             try {
                 let url = `https://api.simple-mmo.com/v1/guilds/wars/${MY_GUILD_ID}/1?api_key=${encodeURIComponent(this.apiKey)}`;
                 let postResp = await apiFetch(url);
