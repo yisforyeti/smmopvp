@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
-    <title>Helheim's War Orders</title>
+    <title>Custom Guild Wars</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
     <style>
         :root { --tab-h: 0px; }
@@ -183,7 +183,7 @@
                 <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
                 <span v-else>Not loaded</span>
                 <span style="color: #888;">{{version}}</span>
-                <span>API {{apiCalls}}/40 per min</span>
+                <span>API {{apiRemaining}}/{{apiLimit}} left per min</span>
             </div>
             <div class="loadbar">
                 <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
@@ -242,6 +242,16 @@
             </div>
 
             <div class="card">
+                <div class="card-title"><span>Options</span></div>
+                <label style="display: flex; align-items: center; gap: 6px; margin: 0;">
+                    <input type="checkbox" v-model="addPriorityToNext" @change="onOptionChange()" style="margin: 0;"> Add Priority to Get Next
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; margin: 8px 0 0;">
+                    <input type="checkbox" v-model="hideZeroAvail" @change="onOptionChange()" style="margin: 0;"> Hide 0 Attackable
+                </label>
+            </div>
+
+            <div class="card">
                 <div class="card-title"><span>Sync Helheim War Orders</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Sync Helheim War Orders', helpTexts.sync)">?<span class="help-tip">{{helpTexts.sync}}</span></span></div>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                     <!-- <span style="font-size: 14px; color: #ccc;">Replace Priority &amp; Focus with the sheet's tabs.</span> -->
@@ -293,7 +303,7 @@
                             <tr><th scope="col">Guild</th><th scope="col">Avail</th><th scope="col">Our Kills</th><th scope="col">Our Deaths</th></tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+                            <tr v-for="item in visibleWars()" :key="item.id" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
                                 <td>
                                     <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
                                     <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
@@ -306,7 +316,7 @@
                             </tr>
                         </tbody>
                     </table>
-                    <div class="war" v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+                    <div class="war" v-for="item in visibleWars()" :key="item.id" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
                         <div class="war-main">
                             <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
                             <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
@@ -416,10 +426,10 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.8.2'; // bump this when you ship a change
+    const VERSION = 'v5.10.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
-    const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min)
+    const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
 
     // Every API request goes through this queue, so calls are always spaced >= API_GAP_MS apart
     // (profile polling, wars, guild members, and manual per-guild refresh taps included).
@@ -427,11 +437,41 @@
     let lastApiCall = 0;
     let apiPaused = false;
     let pauseWaiters = [];
-    const apiTimes = [];
-    function recentCalls() { // calls made in the last 60 seconds
-        const cutoff = Date.now() - 60000;
-        while (apiTimes.length && apiTimes[0] < cutoff) apiTimes.shift();
-        return apiTimes.length;
+
+    // ---------- API rate limit (40 requests / minute) ----------
+    // Tracks what the API says we have left. Each response carries X-RateLimit-Limit / X-RateLimit-Remaining
+    // (and X-RateLimit-Reset or Retry-After when rate limited). If the browser cannot read those headers,
+    // we fall back to counting our own calls inside a 60 second window that starts with the first call.
+    let rlLimit = 40;
+    let rlRemaining = 40;
+    let rlResetAt = 0; // ms timestamp when the current window ends (0 = no window open)
+    function rlRefresh() { // window over => full allowance again
+        if (rlResetAt && Date.now() >= rlResetAt) { rlRemaining = rlLimit; rlResetAt = 0; }
+    }
+    function rlBeforeSend() { // local estimate, corrected by the response headers
+        rlRefresh();
+        if (!rlResetAt) rlResetAt = Date.now() + 60000;
+        rlRemaining = Math.max(0, rlRemaining - 1);
+    }
+    function rlFromResponse(resp) {
+        try {
+            const h = resp.headers;
+            const lim = parseInt(h.get('X-RateLimit-Limit'), 10);
+            const rem = parseInt(h.get('X-RateLimit-Remaining'), 10);
+            const reset = Number(h.get('X-RateLimit-Reset'));
+            const retry = Number(h.get('Retry-After'));
+            if (isFinite(lim) && lim > 0) rlLimit = lim;
+            if (isFinite(rem)) {
+                if (rem > rlRemaining) rlResetAt = Date.now() + 60000; // server started a fresh window earlier than we thought
+                rlRemaining = Math.max(0, rem);
+            }
+            if (isFinite(reset) && reset > 0) rlResetAt = reset > 1e9 ? reset * 1000 : Date.now() + reset * 1000; // epoch seconds or seconds from now
+            if (resp.status === 429) {
+                rlRemaining = 0;
+                if (isFinite(retry) && retry > 0) rlResetAt = Date.now() + retry * 1000;
+                else if (rlResetAt <= Date.now()) rlResetAt = Date.now() + 60000;
+            }
+        } catch (e) { /* headers unreadable: keep the local estimate */ }
     }
     function setApiPaused(v) {
         apiPaused = v;
@@ -443,9 +483,17 @@
             const wait = lastApiCall + API_GAP_MS - Date.now();
             if (wait > 0) await new Promise(r => setTimeout(r, wait));
             while (apiPaused) await new Promise(r => pauseWaiters.push(r)); // paused during the gap wait
+            rlRefresh();
+            while (rlRemaining <= 0 && rlResetAt > Date.now()) { // allowance used up: wait for the window to reset
+                await new Promise(r => setTimeout(r, Math.min(rlResetAt - Date.now() + 50, 1000)));
+                rlRefresh();
+                while (apiPaused) await new Promise(r => pauseWaiters.push(r));
+            }
             lastApiCall = Date.now();
-            apiTimes.push(lastApiCall);
-            return fetch(url, opts || { method: 'POST' });
+            rlBeforeSend();
+            const resp = await fetch(url, opts || { method: 'POST' });
+            rlFromResponse(resp);
+            return resp;
         });
         apiChain = run.catch(() => {});
         return run;
@@ -521,11 +569,14 @@
         tab: 'members',
         version: VERSION,
         paused: false,
-        apiCalls: 0,
+        apiRemaining: 40,
+        apiLimit: 40,
         levelMin: '', // blank = automatic
         levelMax: '', // blank = automatic
         ignoreAbove: '', // ignore wars with our kills above this (blank = off)
         hideAbove: false, // also hide the wars above the limit from the Wars list
+        addPriorityToNext: false, // include Priority guild members in Members / Get Next (Ignored guilds are always left out)
+        hideZeroAvail: false, // hide wars that finished loading and have 0 attackable (guilds still waiting for the API stay visible)
         helpTitle: '',
         helpText: '',
         helpTexts: {
@@ -633,7 +684,7 @@
             this.saveSettings(); // persist built-in defaults on first open
             this.loadUi();
             this.startProfile();
-            setInterval(() => { this.apiCalls = recentCalls(); }, 1000);
+            setInterval(() => { rlRefresh(); this.apiRemaining = rlRemaining; this.apiLimit = rlLimit; }, 1000);
             if (this.apiKey) {
                 await this.loadAll();
             } else {
@@ -659,6 +710,8 @@
                 this.levelMax = s.levelMax == null ? '' : String(s.levelMax);
                 this.ignoreAbove = s.ignoreAbove == null ? '' : String(s.ignoreAbove);
                 this.hideAbove = s.hideAbove === true;
+                this.addPriorityToNext = s.addPriorityToNext === true;
+                this.hideZeroAvail = s.hideZeroAvail === true;
             } catch (e) {
                 console.log('Could not parse saved settings', e);
             }
@@ -675,6 +728,8 @@
                     levelMax: this.levelMax,
                     ignoreAbove: this.ignoreAbove,
                     hideAbove: this.hideAbove,
+                    addPriorityToNext: this.addPriorityToNext,
+                    hideZeroAvail: this.hideZeroAvail,
                 }));
             } catch (e) {
                 console.log('Could not save to localStorage', e);
@@ -1026,6 +1081,7 @@
             });
 
             this.applyWarSort();
+            this.applySort(); // Priority / Ignored changes show up in Members and Get Next right away
         },
 
         // [UNUSED - REVIEW] old version of getNext(); nothing calls it (the button uses getNext())
@@ -1211,10 +1267,6 @@
                     player.url = `https://web.simple-mmo.com/user/attack/${player.user_id}?autoclose=1&level=${player.level}`;
                     available.push(player);
                     this.allAvail.push(player);
-                    // Priority and Ignored guild members are kept out of Get Next. Focus guild members are included.
-                    if(this.priorityWarIds.includes(warId) || this.ignoreWarIds.includes(warId)) {
-                        this.ignoreTargets.push(player.user_id);
-                    }
                 }
             }
 
@@ -1253,7 +1305,20 @@
             // Same level cap as the war table count: the entered Max level, or the automatic 120% of your level
             const maxLv = this.effMax();
             this.sortedDisplay = this.sortedDisplay.filter(p =>
-                p.level >= 1 && p.level <= maxLv && !this.isAutoIgnored(p.guildId));
+                p.level >= 1 && p.level <= maxLv && !this.isAutoIgnored(p.guildId) && !this.isLeftOutOfNext(p.guildId));
+        },
+        // Members / Get Next leave out Ignored guilds, and Priority guilds unless "Add Priority to Get Next" is on. Focus guilds are always included.
+        isLeftOutOfNext(guildId) {
+            return this.ignoreWarIds.includes(guildId) || (!this.addPriorityToNext && this.priorityWarIds.includes(guildId));
+        },
+        // Wars list rows. "Hide 0 Attackable" only hides guilds that have finished loading (availCount >= 0);
+        // guilds still waiting for their API call (availCount -1) and out-of-range 'ignored' wars are not affected.
+        visibleWars() {
+            return this.hideZeroAvail ? this.wars.filter(w => w.availCount !== 0) : this.wars;
+        },
+        onOptionChange() {
+            this.saveSettings();
+            this.applySort(); // adds / removes Priority members right away
         },
         // Sort paradigm for the wars table:
         //  leastKills / mostKills: Priority, then Focus, stay on top (in list order);
