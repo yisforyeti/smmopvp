@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
-    <title>Custom Guild Wars</title>
+    <title>Helheim's War Orders</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
     <style>
         :root { --tab-h: 0px; }
@@ -241,6 +241,15 @@
                 <div v-if="ignoreProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{ignoreProblem()}}</div>
             </div>
 
+            <div class="card">
+                <div class="card-title"><span>Sync Helheim War Orders</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Sync Helheim War Orders', helpTexts.sync)">?<span class="help-tip">{{helpTexts.sync}}</span></span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <!-- <span style="font-size: 14px; color: #ccc;">Replace Priority &amp; Focus with the sheet's tabs.</span> -->
+                    <button class="mini" @click="loadSheetLists()" :disabled="sheetBusy">{{sheetBusy ? 'Loading…' : 'Sync Targets'}}</button>
+                </div>
+                <div v-if="sheetMsg" :class="sheetMsgIsError ? 'status-err' : 'status-ok'" style="margin-top: 6px; font-size: 14px;">{{sheetMsg}}</div>
+            </div>
+
             <div class="card" v-for="s in sections" :key="s.key">
                 <div class="section-head" :style="{marginBottom: collapsed[s.key] ? '0' : ''}">
                     <span class="section-title" :style="{color: s.color}" role="button" tabindex="0" :aria-expanded="!collapsed[s.key]" @click="toggleSection(s.key)" @keyup.enter="toggleSection(s.key)"><span class="chev">{{collapsed[s.key] ? '\u25B8\uFE0E' : '\u25BE\uFE0E'}}</span>{{s.label}} ({{listFor(s.key).length}})</span>
@@ -364,6 +373,23 @@
     </div>
 </div>
 
+<!-- ============ SHEET SYNC CONFIRM MODAL ============ -->
+<div class="modal-backdrop" v-if="pendingSheet" @click.self="cancelSheetLists()">
+    <div class="modal help-modal" role="dialog">
+        <div class="modal-head"><div class="modal-title" style="margin: 0;">Replace Ignored, Priority &amp; Focus?</div></div>
+        <div class="modal-body" style="padding: 12px; flex: 0 1 auto;">
+            <div>The Google Sheet will replace your current lists:</div>
+            <div style="margin-top: 8px;"><b style="color: #aaaaaa;">Ignored</b>: {{ignoreWarIds.length}} &rarr; {{pendingSheet.ignore.length}} guilds</div>
+            <div><b style="color: #ff4b4b;">Priority</b>: {{priorityWarIds.length}} &rarr; {{pendingSheet.priority.length}} guilds</div>
+            <div><b style="color: #ffcc66;">Focus</b>: {{focusWarIds.length}} &rarr; {{pendingSheet.focus.length}} guilds</div>
+        </div>
+        <div class="modal-foot">
+            <button class="secondary" @click="cancelSheetLists()">Cancel</button>
+            <button @click="applySheetLists()">OK</button>
+        </div>
+    </div>
+</div>
+
 <!-- ============ ASSIGN MODAL ============ -->
 <div class="modal-backdrop" v-if="assignTarget" @click.self="cancelAssign()">
     <div class="modal" role="dialog">
@@ -390,11 +416,9 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.6.0'; // bump this when you ship a change
+    const VERSION = 'v5.8.2'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
-    const FOUGHT_KEY = 'gwp4.fought'; // only ids of players you already attacked - never API results
-    const FOUGHT_TTL = 30 * 60 * 1000; // 30 minutes
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min)
 
     // Every API request goes through this queue, so calls are always spaced >= API_GAP_MS apart
@@ -427,6 +451,42 @@
         return run;
     }
     const MY_GUILD_ID = 674;
+
+    // Public Google Sheet holding the Priority / Focus lists (tabs named "Priority" and "Focus", columns: Id, Name)
+    const SHEET_ID = '1Q8PMKpLNUTKJJGfExaEDBQvpGb_iS2H8BK4zfglis20';
+    const SHEET_URL = (tab, cb) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cb}&sheet=${encodeURIComponent(tab)}`;
+
+    // Loads one tab through a <script> tag (JSONP). Plain fetch() is blocked by CORS on Google's sheet endpoints,
+    // a script tag is not. Returns [{id, name}] - the first all-digit cell in each row is the guild id, the cell after it the name.
+    function fetchSheetTab(tab) {
+        return new Promise((resolve, reject) => {
+            const cb = '__sheet_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+            const sc = document.createElement('script');
+            let timer;
+            const cleanup = () => { clearTimeout(timer); delete window[cb]; sc.remove(); };
+            timer = setTimeout(() => { cleanup(); reject(new Error(`timed out loading "${tab}" - is the sheet shared as "Anyone with the link"?`)); }, 15000);
+            sc.onerror = () => { cleanup(); reject(new Error(`could not reach Google Sheets for "${tab}"`)); };
+            window[cb] = (resp) => {
+                cleanup();
+                if (!resp || resp.status !== 'ok' || !resp.table) {
+                    const m = resp && resp.errors && resp.errors[0] ? (resp.errors[0].detailed_message || resp.errors[0].message) : 'unexpected response';
+                    reject(new Error(`"${tab}": ${m}`));
+                    return;
+                }
+                const out = [];
+                (resp.table.rows || []).forEach(r => {
+                    const cells = (r.c || []).map(c => (c && c.v != null) ? String(c.v).trim() : '');
+                    const i = cells.findIndex(v => /^\d+$/.test(v));
+                    if (i < 0) return; // header / blank row
+                    const id = parseInt(cells[i], 10);
+                    if (!out.some(x => x.id === id)) out.push({ id, name: cells[i + 1] || '' });
+                });
+                resolve(out);
+            };
+            sc.src = SHEET_URL(tab, cb);
+            document.head.appendChild(sc);
+        });
+    }
 
     // Helheim-only access: allowed if the player is in guild MY_GUILD_ID *or* their player ID is in this list.
     // Add the ID of anyone outside the guild who should have access.
@@ -471,8 +531,14 @@
         helpTexts: {
             level: 'Leave blank for automatic (max = 120% of your level). Applies on the next load or Refresh.',
             ignore: 'Wars where our kills are above this number are treated as ignored, including Priority and Focus guilds. Tick "Hide the wars above" to also remove them from the Wars list. Blank = off.',
+            sync: 'Replaces your Ignored, Priority and Focus lists with the Ignore, Priority and Focus tabs of the Helheim Google Sheet. You will be asked to confirm before anything changes.',
         },
         modalQuery: '',
+        sheetBusy: false,
+        sheetMsg: '',
+        sheetMsgIsError: false,
+        pendingSheet: null, // {priority:[ids], focus:[ids], names:{id:name}} waiting for OK / Cancel
+        sheetNames: {}, // guild names from the sheet (used for guilds not currently at war)
         progress: { done: 0, total: 0, running: false },
         sortMode: 'leastKills',
         sortOptions: [
@@ -551,7 +617,7 @@
         // sortAvailLow: [],
         // sortAvailHigh: [],
         sortedDisplay: [],
-        fought: [-1],
+        fought: [-1], // players already opened this pass (so Get Next advances); cleared on every fresh load/refresh - never saved
         ignoreTargets: [-1],
         profileInterval: undefined,
         // [UNUSED - REVIEW] never incremented, so the "targetCount > 150" block in getAttackable can never run
@@ -562,7 +628,7 @@
         // Init / settings
         // =====================================================
         async init() {
-            try { localStorage.removeItem('gwp4.cache'); } catch (e) {} // old cache from an earlier build
+            try { localStorage.removeItem('gwp4.cache'); localStorage.removeItem('gwp4.fought'); } catch (e) {} // old caches from earlier builds
             this.loadSettings();
             this.saveSettings(); // persist built-in defaults on first open
             this.loadUi();
@@ -588,6 +654,7 @@
                 if (Array.isArray(s.ignore)) this.ignoreWarIds = s.ignore;
                 if (Array.isArray(s.priority)) this.priorityWarIds = s.priority;
                 if (Array.isArray(s.focus)) this.focusWarIds = s.focus;
+                if (s.names && typeof s.names === 'object') this.sheetNames = s.names;
                 this.levelMin = s.levelMin == null ? '' : String(s.levelMin);
                 this.levelMax = s.levelMax == null ? '' : String(s.levelMax);
                 this.ignoreAbove = s.ignoreAbove == null ? '' : String(s.ignoreAbove);
@@ -603,6 +670,7 @@
                     ignore: this.ignoreWarIds,
                     priority: this.priorityWarIds,
                     focus: this.focusWarIds,
+                    names: this.sheetNames,
                     levelMin: this.levelMin,
                     levelMax: this.levelMax,
                     ignoreAbove: this.ignoreAbove,
@@ -642,7 +710,6 @@
             this.pendingSel = [];
 
             this.progress = { done: 0, total: 0, running: false };
-            this.fought = this.readFought();
             this.setStatus('Loading…', false);
             await this.getProfile();
             await this.getWars();
@@ -687,16 +754,6 @@
             this.saveUi();
             window.scrollTo(0, 0);
         },
-        readFought() {
-            try {
-                const c = JSON.parse(localStorage.getItem(FOUGHT_KEY) || 'null');
-                if (c && Date.now() - c.t < FOUGHT_TTL && Array.isArray(c.ids)) return c.ids;
-            } catch (e) {}
-            return [-1];
-        },
-        saveFought() {
-            try { localStorage.setItem(FOUGHT_KEY, JSON.stringify({ t: Date.now(), ids: this.fought })); } catch (e) {}
-        },
 
         // ---------- Assign modal helpers ----------
         modalItems() {
@@ -719,12 +776,68 @@
         nameFor(id) {
             const w = this.rawWars.find(x => x.id === id);
             if (w) return w.name;
-            return DEFAULT_NAMES[id] || `Guild #${id}`;
+            return this.sheetNames[id] || DEFAULT_NAMES[id] || `Guild #${id}`;
         },
         removeFrom(key, id) {
             this.setList(key, this.listFor(key).filter(x => x !== id));
             this.saveSettings();
             this.rebuildWars();
+        },
+
+        // =====================================================
+        // Google Sheet sync (replaces the Ignored + Priority + Focus lists after OK / Cancel)
+        // =====================================================
+        setSheetMsg(msg, isError) {
+            this.sheetMsg = msg;
+            this.sheetMsgIsError = !!isError;
+        },
+        async loadSheetLists() {
+            if (this.sheetBusy) return;
+            this.sheetBusy = true;
+            this.pendingSheet = null;
+            this.setSheetMsg('Loading sheet…', false);
+            try {
+                const [pri, foc, ign] = await Promise.all([fetchSheetTab('Priority'), fetchSheetTab('Focus'), fetchSheetTab('Ignore')]);
+                if (pri.length === 0 || foc.length === 0) {
+                    this.setSheetMsg(`Sheet looks empty (Priority ${pri.length}, Focus ${foc.length}). Nothing changed.`, true);
+                    return;
+                }
+                // Google silently returns the first tab when a tab name is not found - catch that
+                const same = (a, b) => a.length === b.length && a.every((x, i) => x.id === b[i].id);
+                if (same(pri, foc) || (ign.length > 0 && (same(ign, pri) || same(ign, foc)))) {
+                    this.setSheetMsg('Two of the Ignore / Priority / Focus tabs came back identical - check the tab names. Nothing changed.', true);
+                    return;
+                }
+                // a guild can only live in one list: Priority wins, then Focus, then Ignore
+                const priIds = pri.map(x => x.id);
+                const focIds = foc.map(x => x.id).filter(id => !priIds.includes(id));
+                const ignIds = ign.map(x => x.id).filter(id => !priIds.includes(id) && !focIds.includes(id));
+                const names = {};
+                pri.concat(foc, ign).forEach(x => { if (x.name) names[x.id] = x.name; });
+                this.pendingSheet = { ignore: ignIds, priority: priIds, focus: focIds, names };
+                this.setSheetMsg('', false);
+            } catch (e) {
+                console.log('Sheet load failed', e);
+                this.setSheetMsg('Could not load the Google Sheet: ' + (e && e.message ? e.message : e) + '. Nothing changed.', true);
+            } finally {
+                this.sheetBusy = false;
+            }
+        },
+        applySheetLists() {
+            const ps = this.pendingSheet;
+            if (!ps) return;
+            this.ignoreWarIds = ps.ignore;
+            this.priorityWarIds = ps.priority;
+            this.focusWarIds = ps.focus;
+            this.sheetNames = Object.assign({}, this.sheetNames, ps.names);
+            this.pendingSheet = null;
+            this.saveSettings();
+            this.rebuildWars();
+            this.setSheetMsg(`Replaced: Ignored ${this.ignoreWarIds.length}, Priority ${this.priorityWarIds.length}, Focus ${this.focusWarIds.length}.`, false);
+        },
+        cancelSheetLists() {
+            this.pendingSheet = null;
+            this.setSheetMsg('Cancelled. Nothing changed.', false);
         },
 
         // =====================================================
@@ -927,7 +1040,7 @@
             }
         },
         // Removes every player of the current (top) guild from Get Next - handy when they're all dead.
-        // Uses the same "fought" list as Get Next, so it also survives a page reload (until the fought list expires).
+        // Uses the same temporary list as Get Next; it comes back on the next refresh (players may have healed).
         skipGuild() {
             if (this.sortedDisplay.length === 0) return;
             const gid = this.sortedDisplay[0].guildId;
@@ -935,14 +1048,12 @@
                 if (p.guildId === gid && !this.fought.includes(p.user_id)) this.fought.push(p.user_id);
             });
             this.applySort();
-            this.saveFought();
         },
         markFought(userId) {
             if (!this.fought.includes(userId)) {
                 this.fought.push(userId);
             }
             this.applySort();
-            this.saveFought();
         },
 
         // Always queries the API fresh for every non-ignored guild. apiFetch() enforces the 2s gap between calls.
@@ -952,6 +1063,7 @@
             const run = ++this.runId;
             this.allAvail = [];
             this.ignoreTargets = [-1];
+            this.fought = [-1]; // fresh pass: players you opened earlier may have healed, so they are eligible again
             this.applySort();
             const ids = this.warIds.filter(id => !this.isIgnoredId(id));
             this.progress = { done: 0, total: ids.length, running: ids.length > 0 };
@@ -1138,9 +1250,10 @@
             //     this.sortedDisplay = this.sortAvailLow;
             // }
 
-            const hasCustomMax = this.customMax() !== null; // a custom max replaces the built-in 100000 display cap
+            // Same level cap as the war table count: the entered Max level, or the automatic 120% of your level
+            const maxLv = this.effMax();
             this.sortedDisplay = this.sortedDisplay.filter(p =>
-                p.level >= 1 && (hasCustomMax || p.level < 100000) && !this.isAutoIgnored(p.guildId));
+                p.level >= 1 && p.level <= maxLv && !this.isAutoIgnored(p.guildId));
         },
         // Sort paradigm for the wars table:
         //  leastKills / mostKills: Priority, then Focus, stay on top (in list order);
