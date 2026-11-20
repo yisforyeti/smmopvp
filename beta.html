@@ -426,7 +426,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.11.0'; // bump this when you ship a change
+    const VERSION = 'v5.11.1'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
@@ -1087,12 +1087,17 @@
             this.ignoreTargets = [-1];
             this.fought = [-1]; // fresh pass: players you opened earlier may have healed, so they are eligible again
             this.applySort();
-            const ids = this.warIds.filter(id => !this.isIgnoredId(id));
-            this.progress = { done: 0, total: ids.length, running: ids.length > 0 };
-            for (let i = 0; i < ids.length; i++) {
+            const todo = new Set(this.warIds.filter(id => !this.isIgnoredId(id)));
+            this.progress = { done: 0, total: todo.size, running: todo.size > 0 };
+            while (todo.size > 0) {
                 if (run !== this.runId) return; // a newer run (or reload) took over
-                if (this.isIgnoredId(ids[i])) { this.progress.done++; continue; }
-                await this.getAttackableById(ids[i]);
+                // Always take the next guild in the order the Wars list is showing right now (Priority, Focus, then the
+                // rest, sorted by the selected sort), so changing the sort mid-run is followed immediately.
+                const next = this.wars.find(w => todo.has(w.id));
+                const id = next ? next.id : todo.values().next().value;
+                todo.delete(id);
+                if (this.isIgnoredId(id)) { this.progress.done++; continue; }
+                await this.getAttackableById(id);
                 if (run !== this.runId) return;
                 this.progress.done++;
             }
