@@ -51,13 +51,18 @@
         .modal.help-modal { height: auto; max-height: 80vh; width: min(420px, calc(100% - 32px)); border-radius: 10px; }
         .empty { color: #888; font-style: italic; padding: 8px 0; }
         .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-        .section-title { font-weight: bold; font-size: 17px; }
+        .section-title { display: block; flex: 1; text-align: left; font-weight: bold; font-size: 17px; cursor: pointer; user-select: none; padding: 6px 0; margin: 0; background: none; border: 0; border-radius: 0; box-shadow: none; outline: none; -webkit-appearance: none; appearance: none; -webkit-tap-highlight-color: transparent; }
+        .section-title:hover, .section-title:focus, .section-title:active, .section-title:focus-visible { background: none; outline: none; box-shadow: none; }
+        .section-title .chev { display: inline-block; width: 1em; margin-right: 2px; font-size: 14px; }
         .guild-item { display: flex; justify-content: space-between; align-items: center; min-height: 40px; border-top: 1px solid #2a3340; }
         .guild-item a { color: #ddd; }
         .remove-btn { background: none; border: none; color: #ff7777; font-size: 22px; width: 44px; padding: 0; }
         .status-err { color: #ff7777; } .status-ok { color: #7fdc7f; }
         .getnext { position: fixed; left: 0; right: 0; bottom: var(--tab-h); z-index: 15; padding: 8px 12px; background: linear-gradient(rgba(17,25,31,0), #11191f 40%); }
-        .getnext button { display: block; width: 100%; max-width: 720px; margin: 0 auto; height: 52px; font-size: 18px; }
+        .getnext-row { display: flex; gap: 8px; max-width: 720px; margin: 0 auto; }
+        .getnext button { height: 52px; font-size: 18px; margin: 0; }
+        .getnext .gn-main { flex: 1; min-width: 0; }
+        .getnext .gn-skip { flex: 0 0 110px; padding: 0; }
         .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; }
         .modal { background: #1b2430; width: min(560px, 100%); height: min(80vh, 720px); display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; }
         .modal-head { padding: 12px; border-bottom: 1px solid #2a3340; }
@@ -128,8 +133,9 @@
 
             /* Get Next centered under the main box, then links / Get Profile / stats */
             .getnext { display: none !important; } /* the fixed mobile bar */
-            .getnext-desktop { display: flex; justify-content: center; padding: 10px 0 5px; }
+            .getnext-desktop { display: flex; justify-content: center; gap: 8px; padding: 10px 0 5px; }
             .getnext-desktop button { width: 375px; height: 48px; padding: 0; margin: 0; }
+            .getnext-desktop button.gn-skip { width: 130px; }
             .desktop-footer { display: flex; flex-direction: column; align-items: center; gap: 5px; padding-bottom: 10px; }
         }
         /* ---------- Mobile / narrow: tabs + bottom bar (gwp4 style) ---------- */
@@ -177,7 +183,7 @@
                 <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
                 <span v-else>Not loaded</span>
                 <span style="color: #888;">{{version}}</span>
-                <span>API {{apiCalls}}/40 per min</span>
+                <span>API {{apiRemaining}}/{{apiLimit}} left per min</span>
             </div>
             <div class="loadbar">
                 <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
@@ -235,15 +241,36 @@
                 <div v-if="ignoreProblem()" class="status-err" style="margin-top: 6px; font-size: 14px;">{{ignoreProblem()}}</div>
             </div>
 
+            <div class="card">
+                <div class="card-title"><span>Options</span></div>
+                <label style="display: flex; align-items: center; gap: 6px; margin: 0;">
+                    <input type="checkbox" v-model="addPriorityToNext" @change="onOptionChange()" style="margin: 0;"> Add Priority to Get Next
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; margin: 8px 0 0;">
+                    <input type="checkbox" v-model="hideZeroAvail" @change="onOptionChange()" style="margin: 0;"> Hide 0 Attackable
+                </label>
+            </div>
+
+            <div class="card">
+                <div class="card-title"><span>Sync Helheim War Orders</span><span class="help" tabindex="0" aria-label="Help" @click="openHelp('Sync Helheim War Orders', helpTexts.sync)">?<span class="help-tip">{{helpTexts.sync}}</span></span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <!-- <span style="font-size: 14px; color: #ccc;">Replace Priority &amp; Focus with the sheet's tabs.</span> -->
+                    <button class="mini" @click="loadSheetLists()" :disabled="sheetBusy">{{sheetBusy ? 'Loading…' : 'Sync Targets'}}</button>
+                </div>
+                <div v-if="sheetMsg" :class="sheetMsgIsError ? 'status-err' : 'status-ok'" style="margin-top: 6px; font-size: 14px;">{{sheetMsg}}</div>
+            </div>
+
             <div class="card" v-for="s in sections" :key="s.key">
-                <div class="section-head">
-                    <span class="section-title" :style="{color: s.color}">{{s.label}} ({{listFor(s.key).length}})</span>
+                <div class="section-head" :style="{marginBottom: collapsed[s.key] ? '0' : ''}">
+                    <span class="section-title" :style="{color: s.color}" role="button" tabindex="0" :aria-expanded="!collapsed[s.key]" @click="toggleSection(s.key)" @keyup.enter="toggleSection(s.key)"><span class="chev">{{collapsed[s.key] ? '\u25B8\uFE0E' : '\u25BE\uFE0E'}}</span>{{s.label}} ({{listFor(s.key).length}})</span>
                     <button class="mini" @click="startAssign(s.key)" :disabled="wars.length === 0">Assign…</button>
                 </div>
-                <div v-if="listFor(s.key).length === 0" class="empty">None</div>
-                <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
-                    <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}} ({{gid}})<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
-                    <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
+                <div v-show="!collapsed[s.key]">
+                    <div v-if="listFor(s.key).length === 0" class="empty">None</div>
+                    <div class="guild-item" v-for="(gid, gi) in listFor(s.key)" :key="gi" :style="{opacity: isAtWar(gid) ? 1 : 0.55}">
+                        <a :href="'https://web.simple-mmo.com/guilds/view/' + gid" target="_blank">{{nameFor(gid)}} ({{gid}})<span v-if="rawWars.length > 0 && !isAtWar(gid)" style="color:#888"> (not at war)</span></a>
+                        <button class="remove-btn" title="Remove" @click="removeFrom(s.key, gid)">&times;</button>
+                    </div>
                 </div>
             </div>
             <div v-if="wars.length === 0" class="empty">Save &amp; Load your API key to enable Assign.</div>
@@ -266,8 +293,8 @@
                         <select v-model="sortMode" @change="applyWarSort(); saveUi()">
                             <option value="leastKills">Least Kills (Priority/Focus on top)</option>
                             <option value="mostKills">Most Kills (Priority/Focus on top)</option>
-                            <option value="mostAvail">Most Available</option>
-                            <option value="leastAvail">Least Available</option>
+                            <option value="mostAvail">Most Available (Priority/Focus on top)</option>
+                            <option value="leastAvail">Least Available (Priority/Focus on top)</option>
                         </select>
                     </div>
                     <div v-if="wars.length === 0" class="empty">No wars loaded yet. Go to Setup and Save &amp; Load.</div>
@@ -276,12 +303,12 @@
                             <tr><th scope="col">Guild</th><th scope="col">Avail</th><th scope="col">Our Kills</th><th scope="col">Our Deaths</th></tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+                            <tr v-for="item in visibleWars()" :key="item.id" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
                                 <td>
                                     <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
                                     <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
                                     <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
-                                    <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
+                                    <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})<span v-if="item.capped" title="Kill cap reached: some available players were left out of Get Next">*</span></a>
                                 </td>
                                 <td><a href="#" title="Click to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a></td>
                                 <td>{{item.kills}}</td>
@@ -289,12 +316,12 @@
                             </tr>
                         </tbody>
                     </table>
-                    <div class="war" v-for="(item, i) in wars" :key="i" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
+                    <div class="war" v-for="item in visibleWars()" :key="item.id" :class="{'priority-guild': item.isPriority, 'focus-guild': item.isFocus, 'ignored-guild': item.isIgnored}">
                         <div class="war-main">
                             <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
                             <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
                             <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
-                            <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
+                            <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})<span v-if="item.capped" title="Kill cap reached: some available players were left out of Get Next">*</span></a>
                         </div>
                         <div class="war-meta">
                             <a href="#" class="avail" title="Tap to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a>
@@ -309,17 +336,18 @@
                     <h3 class="pane-title">&#128101; Guild Members</h3>
                     <div v-if="sortedDisplay.length === 0" class="empty">No targets yet. Load your wars in Setup, then wait for guilds to finish loading.</div>
                     <a class="member" v-for="item in sortedDisplay" :key="item.user_id" :href="item.url" target="_blank" @click="markFought(item.user_id)">
-                        <span class="g">{{item.guildName}} ({{item.guildId}})</span>
+                        <span class="g">{{item.guildName}} ({{item.guildId}})<span v-if="isCapped(item.guildId)">*</span></span>
                         <span class="n">{{item.name}}</span>
                         <span class="lv lv-m">Lv {{item.level}}</span>
                         <span class="lv-d">({{item.level}})</span>
                     </a>
                 </section>
             </div>
-        <div style="padding-right: 22%">
+        <div style="padding-right: 10%">
             <!-- ============ Desktop footer ============ -->
             <div class="getnext-desktop">
                 <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+                <button class="secondary gn-skip" @click="skipGuild()" :disabled="sortedDisplay.length === 0" :title="sortedDisplay.length ? 'Remove everyone in ' + sortedDisplay[0].guildName + ' from Get Next' : ''">Skip Guild</button>
             </div>
             <div class="desktop-footer">
                 <div class="links">
@@ -340,7 +368,10 @@
 </div>
 
 <div class="getnext" v-show="tab !== 'setup' && !denied">
-    <button @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+    <div class="getnext-row">
+        <button class="gn-main" @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
+        <button class="secondary gn-skip" @click="skipGuild()" :disabled="sortedDisplay.length === 0">Skip Guild</button>
+    </div>
 </div>
 
 <!-- ============ HELP MODAL (mobile: tap the ?) ============ -->
@@ -349,6 +380,23 @@
         <div class="modal-head"><div class="modal-title" style="margin: 0;">{{helpTitle}}</div></div>
         <div class="modal-body" style="padding: 12px; flex: 0 1 auto;">{{helpText}}</div>
         <div class="modal-foot"><button @click="closeHelp()">Close</button></div>
+    </div>
+</div>
+
+<!-- ============ SHEET SYNC CONFIRM MODAL ============ -->
+<div class="modal-backdrop" v-if="pendingSheet" @click.self="cancelSheetLists()">
+    <div class="modal help-modal" role="dialog">
+        <div class="modal-head"><div class="modal-title" style="margin: 0;">Replace Ignored, Priority &amp; Focus?</div></div>
+        <div class="modal-body" style="padding: 12px; flex: 0 1 auto;">
+            <div>The Google Sheet will replace your current lists:</div>
+            <div style="margin-top: 8px;"><b style="color: #aaaaaa;">Ignored</b>: {{ignoreWarIds.length}} &rarr; {{pendingSheet.ignore.length}} guilds</div>
+            <div><b style="color: #ff4b4b;">Priority</b>: {{priorityWarIds.length}} &rarr; {{pendingSheet.priority.length}} guilds</div>
+            <div><b style="color: #ffcc66;">Focus</b>: {{focusWarIds.length}} &rarr; {{pendingSheet.focus.length}} guilds</div>
+        </div>
+        <div class="modal-foot">
+            <button class="secondary" @click="cancelSheetLists()">Cancel</button>
+            <button @click="applySheetLists()">OK</button>
+        </div>
     </div>
 </div>
 
@@ -378,12 +426,10 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.4.0'; // bump this when you ship a change
+    const VERSION = 'v5.12.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
-    const FOUGHT_KEY = 'gwp4.fought'; // only ids of players you already attacked - never API results
-    const FOUGHT_TTL = 30 * 60 * 1000; // 30 minutes
-    const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min)
+    const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
 
     // Every API request goes through this queue, so calls are always spaced >= API_GAP_MS apart
     // (profile polling, wars, guild members, and manual per-guild refresh taps included).
@@ -391,11 +437,41 @@
     let lastApiCall = 0;
     let apiPaused = false;
     let pauseWaiters = [];
-    const apiTimes = [];
-    function recentCalls() { // calls made in the last 60 seconds
-        const cutoff = Date.now() - 60000;
-        while (apiTimes.length && apiTimes[0] < cutoff) apiTimes.shift();
-        return apiTimes.length;
+
+    // ---------- API rate limit (40 requests / minute) ----------
+    // Tracks what the API says we have left. Each response carries X-RateLimit-Limit / X-RateLimit-Remaining
+    // (and X-RateLimit-Reset or Retry-After when rate limited). If the browser cannot read those headers,
+    // we fall back to counting our own calls inside a 60 second window that starts with the first call.
+    let rlLimit = 40;
+    let rlRemaining = 40;
+    let rlResetAt = 0; // ms timestamp when the current window ends (0 = no window open)
+    function rlRefresh() { // window over => full allowance again
+        if (rlResetAt && Date.now() >= rlResetAt) { rlRemaining = rlLimit; rlResetAt = 0; }
+    }
+    function rlBeforeSend() { // local estimate, corrected by the response headers
+        rlRefresh();
+        if (!rlResetAt) rlResetAt = Date.now() + 60000;
+        rlRemaining = Math.max(0, rlRemaining - 1);
+    }
+    function rlFromResponse(resp) {
+        try {
+            const h = resp.headers;
+            const lim = parseInt(h.get('X-RateLimit-Limit'), 10);
+            const rem = parseInt(h.get('X-RateLimit-Remaining'), 10);
+            const reset = Number(h.get('X-RateLimit-Reset'));
+            const retry = Number(h.get('Retry-After'));
+            if (isFinite(lim) && lim > 0) rlLimit = lim;
+            if (isFinite(rem)) {
+                if (rem > rlRemaining) rlResetAt = Date.now() + 60000; // server started a fresh window earlier than we thought
+                rlRemaining = Math.max(0, rem);
+            }
+            if (isFinite(reset) && reset > 0) rlResetAt = reset > 1e9 ? reset * 1000 : Date.now() + reset * 1000; // epoch seconds or seconds from now
+            if (resp.status === 429) {
+                rlRemaining = 0;
+                if (isFinite(retry) && retry > 0) rlResetAt = Date.now() + retry * 1000;
+                else if (rlResetAt <= Date.now()) rlResetAt = Date.now() + 60000;
+            }
+        } catch (e) { /* headers unreadable: keep the local estimate */ }
     }
     function setApiPaused(v) {
         apiPaused = v;
@@ -407,19 +483,63 @@
             const wait = lastApiCall + API_GAP_MS - Date.now();
             if (wait > 0) await new Promise(r => setTimeout(r, wait));
             while (apiPaused) await new Promise(r => pauseWaiters.push(r)); // paused during the gap wait
+            rlRefresh();
+            while (rlRemaining <= 0 && rlResetAt > Date.now()) { // allowance used up: wait for the window to reset
+                await new Promise(r => setTimeout(r, Math.min(rlResetAt - Date.now() + 50, 1000)));
+                rlRefresh();
+                while (apiPaused) await new Promise(r => pauseWaiters.push(r));
+            }
             lastApiCall = Date.now();
-            apiTimes.push(lastApiCall);
-            return fetch(url, opts || { method: 'POST' });
+            rlBeforeSend();
+            const resp = await fetch(url, opts || { method: 'POST' });
+            rlFromResponse(resp);
+            return resp;
         });
         apiChain = run.catch(() => {});
         return run;
     }
     const MY_GUILD_ID = 674;
 
+    // Public Google Sheet holding the Priority / Focus lists (tabs named "Priority" and "Focus", columns: Id, Name)
+    const SHEET_ID = '1Q8PMKpLNUTKJJGfExaEDBQvpGb_iS2H8BK4zfglis20';
+    const SHEET_URL = (tab, cb) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cb}&sheet=${encodeURIComponent(tab)}`;
+
+    // Loads one tab through a <script> tag (JSONP). Plain fetch() is blocked by CORS on Google's sheet endpoints,
+    // a script tag is not. Returns [{id, name}] - the first all-digit cell in each row is the guild id, the cell after it the name.
+    function fetchSheetTab(tab) {
+        return new Promise((resolve, reject) => {
+            const cb = '__sheet_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+            const sc = document.createElement('script');
+            let timer;
+            const cleanup = () => { clearTimeout(timer); delete window[cb]; sc.remove(); };
+            timer = setTimeout(() => { cleanup(); reject(new Error(`timed out loading "${tab}" - is the sheet shared as "Anyone with the link"?`)); }, 15000);
+            sc.onerror = () => { cleanup(); reject(new Error(`could not reach Google Sheets for "${tab}"`)); };
+            window[cb] = (resp) => {
+                cleanup();
+                if (!resp || resp.status !== 'ok' || !resp.table) {
+                    const m = resp && resp.errors && resp.errors[0] ? (resp.errors[0].detailed_message || resp.errors[0].message) : 'unexpected response';
+                    reject(new Error(`"${tab}": ${m}`));
+                    return;
+                }
+                const out = [];
+                (resp.table.rows || []).forEach(r => {
+                    const cells = (r.c || []).map(c => (c && c.v != null) ? String(c.v).trim() : '');
+                    const i = cells.findIndex(v => /^\d+$/.test(v));
+                    if (i < 0) return; // header / blank row
+                    const id = parseInt(cells[i], 10);
+                    if (!out.some(x => x.id === id)) out.push({ id, name: cells[i + 1] || '' });
+                });
+                resolve(out);
+            };
+            sc.src = SHEET_URL(tab, cb);
+            document.head.appendChild(sc);
+        });
+    }
+
     // Helheim-only access: allowed if the player is in guild MY_GUILD_ID *or* their player ID is in this list.
     // Add the ID of anyone outside the guild who should have access.
     const ALLOWED_USER_IDS = [
-        1289208
+        // 7,
     ];
 
     // Used to show a friendly name for guilds that are in a list but not currently at war
@@ -449,18 +569,27 @@
         tab: 'members',
         version: VERSION,
         paused: false,
-        apiCalls: 0,
+        apiRemaining: 40,
+        apiLimit: 40,
         levelMin: '', // blank = automatic
         levelMax: '', // blank = automatic
         ignoreAbove: '', // ignore wars with our kills above this (blank = off)
         hideAbove: false, // also hide the wars above the limit from the Wars list
+        addPriorityToNext: false, // include Priority guild members in Members / Get Next (Ignored guilds are always left out)
+        hideZeroAvail: false, // hide wars that finished loading and have 0 attackable (guilds still waiting for the API stay visible)
         helpTitle: '',
         helpText: '',
         helpTexts: {
             level: 'Leave blank for automatic (max = 120% of your level). Applies on the next load or Refresh.',
             ignore: 'Wars where our kills are above this number are treated as ignored, including Priority and Focus guilds. Tick "Hide the wars above" to also remove them from the Wars list. Blank = off.',
+            sync: 'Replaces your Ignored, Priority and Focus lists with the Ignore, Priority and Focus tabs of the Helheim Google Sheet. You will be asked to confirm before anything changes.',
         },
         modalQuery: '',
+        sheetBusy: false,
+        sheetMsg: '',
+        sheetMsgIsError: false,
+        pendingSheet: null, // {priority:[ids], focus:[ids], names:{id:name}} waiting for OK / Cancel
+        sheetNames: {}, // guild names from the sheet (used for guilds not currently at war)
         progress: { done: 0, total: 0, running: false },
         sortMode: 'leastKills',
         sortOptions: [
@@ -474,46 +603,13 @@
 
         // ---------- Guild lists (loaded from localStorage on init) ----------
         ignoreWarIds: [
-            3452, //The Rain Factory
-            2836, //The Scarlet Legion
-            243, //The WolfPack
-            474, //The Forest
-            4134, //Umbral
-            3812, //Coven
         ],
         priorityWarIds: [
-            3994, //The Cult of SV
-            4276, //Eternal Gladiators
-            3212, //Shadow Garden
-            607, //The Knights Who Say Yee
-            2874, //The Blazing Beasts
-            4250, //SOLO
-            574, //Golden Arrows
-            3009, //Demolitions Great Kingdom
-            2089, //Prostor
-            3342, //[Slums] Guild
         ],
         focusWarIds: [
-            1833, //The Lost Crusade
-            1873, //The Asylum
-            3348, //afterlow
-            2700, //The Fallen
-            518, //Gloryindo
-            2943, //Old elfs
-            3418, //Ego
-            4532, //Sumbosia
-            346, //Abyss
-            424, //Knights of the Internet
-            372, //Dread Pirate's Cove
-            2596, //The Pearly Gates
-            2708, //The Bear Tribe
-            493, //Limited Edition
-            1518, //Indonesian Trade Association
-            427, //UwU
-            43, //The MerryMen of SMMO
-            3928, //Spontaneous Runners
         ],
 
+        collapsed: { ignore: false, priority: false, focus: false }, // Setup section headers (remembered)
         sections: [
             { key: 'ignore',   label: 'Ignored',  color: '#aaaaaa' },
             { key: 'priority', label: 'Priority', color: '#ff4b4b' },
@@ -538,7 +634,7 @@
         // sortAvailLow: [],
         // sortAvailHigh: [],
         sortedDisplay: [],
-        fought: [-1],
+        fought: [-1], // players already opened this pass (so Get Next advances); cleared on every fresh load/refresh - never saved
         ignoreTargets: [-1],
         profileInterval: undefined,
         // [UNUSED - REVIEW] never incremented, so the "targetCount > 150" block in getAttackable can never run
@@ -549,12 +645,12 @@
         // Init / settings
         // =====================================================
         async init() {
-            try { localStorage.removeItem('gwp4.cache'); } catch (e) {} // old cache from an earlier build
+            try { localStorage.removeItem('gwp4.cache'); localStorage.removeItem('gwp4.fought'); } catch (e) {} // old caches from earlier builds
             this.loadSettings();
             this.saveSettings(); // persist built-in defaults on first open
             this.loadUi();
             this.startProfile();
-            setInterval(() => { this.apiCalls = recentCalls(); }, 1000);
+            setInterval(() => { rlRefresh(); this.apiRemaining = rlRemaining; this.apiLimit = rlLimit; }, 1000);
             if (this.apiKey) {
                 await this.loadAll();
             } else {
@@ -575,10 +671,13 @@
                 if (Array.isArray(s.ignore)) this.ignoreWarIds = s.ignore;
                 if (Array.isArray(s.priority)) this.priorityWarIds = s.priority;
                 if (Array.isArray(s.focus)) this.focusWarIds = s.focus;
+                if (s.names && typeof s.names === 'object') this.sheetNames = s.names;
                 this.levelMin = s.levelMin == null ? '' : String(s.levelMin);
                 this.levelMax = s.levelMax == null ? '' : String(s.levelMax);
                 this.ignoreAbove = s.ignoreAbove == null ? '' : String(s.ignoreAbove);
                 this.hideAbove = s.hideAbove === true;
+                this.addPriorityToNext = s.addPriorityToNext === true;
+                this.hideZeroAvail = s.hideZeroAvail === true;
             } catch (e) {
                 console.log('Could not parse saved settings', e);
             }
@@ -590,10 +689,13 @@
                     ignore: this.ignoreWarIds,
                     priority: this.priorityWarIds,
                     focus: this.focusWarIds,
+                    names: this.sheetNames,
                     levelMin: this.levelMin,
                     levelMax: this.levelMax,
                     ignoreAbove: this.ignoreAbove,
                     hideAbove: this.hideAbove,
+                    addPriorityToNext: this.addPriorityToNext,
+                    hideZeroAvail: this.hideZeroAvail,
                 }));
             } catch (e) {
                 console.log('Could not save to localStorage', e);
@@ -629,7 +731,6 @@
             this.pendingSel = [];
 
             this.progress = { done: 0, total: 0, running: false };
-            this.fought = this.readFought();
             this.setStatus('Loading…', false);
             await this.getProfile();
             await this.getWars();
@@ -657,25 +758,22 @@
                 const u = JSON.parse(localStorage.getItem(UI_KEY) || '{}');
                 if (['setup', 'wars', 'members'].includes(u.tab)) this.tab = u.tab;
                 if (this.sortOptions.some(o => o.value === u.sortMode)) this.sortMode = u.sortMode;
+                if (u.collapsed && typeof u.collapsed === 'object') {
+                    this.sections.forEach(sec => { this.collapsed[sec.key] = u.collapsed[sec.key] === true; });
+                }
             } catch (e) { console.log('Could not load UI state', e); }
         },
         saveUi() {
-            try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: this.tab, sortMode: this.sortMode })); } catch (e) {}
+            try { localStorage.setItem(UI_KEY, JSON.stringify({ tab: this.tab, sortMode: this.sortMode, collapsed: this.collapsed })); } catch (e) {}
+        },
+        toggleSection(key) {
+            this.collapsed[key] = !this.collapsed[key];
+            this.saveUi();
         },
         setTab(t) {
             this.tab = t;
             this.saveUi();
             window.scrollTo(0, 0);
-        },
-        readFought() {
-            try {
-                const c = JSON.parse(localStorage.getItem(FOUGHT_KEY) || 'null');
-                if (c && Date.now() - c.t < FOUGHT_TTL && Array.isArray(c.ids)) return c.ids;
-            } catch (e) {}
-            return [-1];
-        },
-        saveFought() {
-            try { localStorage.setItem(FOUGHT_KEY, JSON.stringify({ t: Date.now(), ids: this.fought })); } catch (e) {}
         },
 
         // ---------- Assign modal helpers ----------
@@ -699,12 +797,68 @@
         nameFor(id) {
             const w = this.rawWars.find(x => x.id === id);
             if (w) return w.name;
-            return DEFAULT_NAMES[id] || `Guild #${id}`;
+            return this.sheetNames[id] || DEFAULT_NAMES[id] || `Guild #${id}`;
         },
         removeFrom(key, id) {
             this.setList(key, this.listFor(key).filter(x => x !== id));
             this.saveSettings();
             this.rebuildWars();
+        },
+
+        // =====================================================
+        // Google Sheet sync (replaces the Ignored + Priority + Focus lists after OK / Cancel)
+        // =====================================================
+        setSheetMsg(msg, isError) {
+            this.sheetMsg = msg;
+            this.sheetMsgIsError = !!isError;
+        },
+        async loadSheetLists() {
+            if (this.sheetBusy) return;
+            this.sheetBusy = true;
+            this.pendingSheet = null;
+            this.setSheetMsg('Loading sheet…', false);
+            try {
+                const [pri, foc, ign] = await Promise.all([fetchSheetTab('Priority'), fetchSheetTab('Focus'), fetchSheetTab('Ignore')]);
+                if (pri.length === 0 || foc.length === 0) {
+                    this.setSheetMsg(`Sheet looks empty (Priority ${pri.length}, Focus ${foc.length}). Nothing changed.`, true);
+                    return;
+                }
+                // Google silently returns the first tab when a tab name is not found - catch that
+                const same = (a, b) => a.length === b.length && a.every((x, i) => x.id === b[i].id);
+                if (same(pri, foc) || (ign.length > 0 && (same(ign, pri) || same(ign, foc)))) {
+                    this.setSheetMsg('Two of the Ignore / Priority / Focus tabs came back identical - check the tab names. Nothing changed.', true);
+                    return;
+                }
+                // a guild can only live in one list: Priority wins, then Focus, then Ignore
+                const priIds = pri.map(x => x.id);
+                const focIds = foc.map(x => x.id).filter(id => !priIds.includes(id));
+                const ignIds = ign.map(x => x.id).filter(id => !priIds.includes(id) && !focIds.includes(id));
+                const names = {};
+                pri.concat(foc, ign).forEach(x => { if (x.name) names[x.id] = x.name; });
+                this.pendingSheet = { ignore: ignIds, priority: priIds, focus: focIds, names };
+                this.setSheetMsg('', false);
+            } catch (e) {
+                console.log('Sheet load failed', e);
+                this.setSheetMsg('Could not load the Google Sheet: ' + (e && e.message ? e.message : e) + '. Nothing changed.', true);
+            } finally {
+                this.sheetBusy = false;
+            }
+        },
+        applySheetLists() {
+            const ps = this.pendingSheet;
+            if (!ps) return;
+            this.ignoreWarIds = ps.ignore;
+            this.priorityWarIds = ps.priority;
+            this.focusWarIds = ps.focus;
+            this.sheetNames = Object.assign({}, this.sheetNames, ps.names);
+            this.pendingSheet = null;
+            this.saveSettings();
+            this.rebuildWars();
+            this.setSheetMsg(`Replaced: Ignored ${this.ignoreWarIds.length}, Priority ${this.priorityWarIds.length}, Focus ${this.focusWarIds.length}.`, false);
+        },
+        cancelSheetLists() {
+            this.pendingSheet = null;
+            this.setSheetMsg('Cancelled. Nothing changed.', false);
         },
 
         // =====================================================
@@ -883,6 +1037,7 @@
                     name: item.name,
                     avail: this.isAutoIgnored(item.id) ? 'ignored' : (old && old.avail !== 'ignored' ? old.avail : '...'),
                     availCount: (old && old.avail !== 'ignored' && !this.isAutoIgnored(item.id)) ? old.availCount : -1,
+                    capped: !!(old && old.capped && !this.isAutoIgnored(item.id)),
                     originalIndex: idx,
                     kills: item.kills,
                     deaths: item.deaths,
@@ -893,6 +1048,7 @@
             });
 
             this.applyWarSort();
+            this.applySort(); // Priority / Ignored changes show up in Members and Get Next right away
         },
 
         // [UNUSED - REVIEW] old version of getNext(); nothing calls it (the button uses getNext())
@@ -906,12 +1062,21 @@
                 this.markFought(this.sortedDisplay[0].user_id);
             }
         },
+        // Removes every player of the current (top) guild from Get Next - handy when they're all dead.
+        // Uses the same temporary list as Get Next; it comes back on the next refresh (players may have healed).
+        skipGuild() {
+            if (this.sortedDisplay.length === 0) return;
+            const gid = this.sortedDisplay[0].guildId;
+            this.allAvail.forEach(p => {
+                if (p.guildId === gid && !this.fought.includes(p.user_id)) this.fought.push(p.user_id);
+            });
+            this.applySort();
+        },
         markFought(userId) {
             if (!this.fought.includes(userId)) {
                 this.fought.push(userId);
             }
             this.applySort();
-            this.saveFought();
         },
 
         // Always queries the API fresh for every non-ignored guild. apiFetch() enforces the 2s gap between calls.
@@ -921,13 +1086,19 @@
             const run = ++this.runId;
             this.allAvail = [];
             this.ignoreTargets = [-1];
+            this.fought = [-1]; // fresh pass: players you opened earlier may have healed, so they are eligible again
             this.applySort();
-            const ids = this.warIds.filter(id => !this.isIgnoredId(id));
-            this.progress = { done: 0, total: ids.length, running: ids.length > 0 };
-            for (let i = 0; i < ids.length; i++) {
+            const todo = new Set(this.warIds.filter(id => !this.isIgnoredId(id)));
+            this.progress = { done: 0, total: todo.size, running: todo.size > 0 };
+            while (todo.size > 0) {
                 if (run !== this.runId) return; // a newer run (or reload) took over
-                if (this.isIgnoredId(ids[i])) { this.progress.done++; continue; }
-                await this.getAttackableById(ids[i]);
+                // Always take the next guild in the order the Wars list is showing right now (Priority, Focus, then the
+                // rest, sorted by the selected sort), so changing the sort mid-run is followed immediately.
+                const next = this.wars.find(w => todo.has(w.id));
+                const id = next ? next.id : todo.values().next().value;
+                todo.delete(id);
+                if (this.isIgnoredId(id)) { this.progress.done++; continue; }
+                await this.getAttackableById(id);
                 if (run !== this.runId) return;
                 this.progress.done++;
             }
@@ -1053,11 +1224,19 @@
 
                 attackable.push(player);
             }
+            // Kill cap: never queue more targets than it takes to reach KILL_CAP kills for this war
+            // (e.g. 12 available at 1490 kills -> only 10 are added). Kills are as of the last load/refresh.
+            const KILL_CAP = 1500;
+            const warRow = this.rawWars.find(x => x.id === warId);
+            const warKills = warRow ? Number(warRow.kills) : NaN;
+            const killRoom = Number.isFinite(warKills) ? Math.max(0, KILL_CAP - warKills) : Infinity;
+            let capped = false; // true when the kill cap actually left someone out (shown as * after the guild name)
             for(var j = 0; j < attackable.length; j++) {
                 let player = attackable[j];
 
                 let curHp = (player.current_hp / player.max_hp)*100;
                 if(curHp >= 50 && player.level <= this.effMax()) {
+                    if (available.length >= killRoom) { capped = true; continue; }
                     if(player.level >= this.myLevel * 0.33 && player.level < this.myLevel * 0.66) {
                         highLevel += 1;
                     }
@@ -1068,10 +1247,6 @@
                     player.url = `https://web.simple-mmo.com/user/attack/${player.user_id}?autoclose=1&level=${player.level}`;
                     available.push(player);
                     this.allAvail.push(player);
-                    // Priority and Ignored guild members are kept out of Get Next. Focus guild members are included.
-                    if(this.priorityWarIds.includes(warId) || this.ignoreWarIds.includes(warId)) {
-                        this.ignoreTargets.push(player.user_id);
-                    }
                 }
             }
 
@@ -1080,6 +1255,7 @@
                 if(this.wars[j].id === warId) {
                     this.wars[j].avail = `${available.length}\/${attackable.length}`;
                     this.wars[j].availCount = available.length;
+                    this.wars[j].capped = capped;
                     break;
                 }
             }
@@ -1107,43 +1283,52 @@
             //     this.sortedDisplay = this.sortAvailLow;
             // }
 
-            const hasCustomMax = this.customMax() !== null; // a custom max replaces the built-in 100000 display cap
+            // Same level cap as the war table count: the entered Max level, or the automatic 120% of your level
+            const maxLv = this.effMax();
             this.sortedDisplay = this.sortedDisplay.filter(p =>
-                p.level >= 1 && (hasCustomMax || p.level < 100000) && !this.isAutoIgnored(p.guildId));
+                p.level >= 1 && p.level <= maxLv && !this.isAutoIgnored(p.guildId) && !this.isLeftOutOfNext(p.guildId));
+        },
+        // Members / Get Next leave out Ignored guilds, and Priority guilds unless "Add Priority to Get Next" is on. Focus guilds are always included.
+        isCapped(guildId) { // kill cap trimmed this guild's Get Next players
+            const w = this.wars.find(x => x.id === guildId);
+            return !!(w && w.capped);
+        },
+        isLeftOutOfNext(guildId) {
+            return this.ignoreWarIds.includes(guildId) || (!this.addPriorityToNext && this.priorityWarIds.includes(guildId));
+        },
+        // Wars list rows. "Hide 0 Attackable" only hides guilds that have finished loading (availCount >= 0);
+        // guilds still waiting for their API call (availCount -1) and out-of-range 'ignored' wars are not affected.
+        visibleWars() {
+            return this.hideZeroAvail ? this.wars.filter(w => w.availCount !== 0) : this.wars;
+        },
+        onOptionChange() {
+            this.saveSettings();
+            this.applySort(); // adds / removes Priority members right away
         },
         // Sort paradigm for the wars table:
-        //  leastKills / mostKills: Priority, then Focus, stay on top (in list order);
-        //                          all remaining guilds sort by our kills.
-        //  mostAvail:  whole list sorted by available count, highest first.
-        //  leastAvail: whole list sorted by available count, lowest first,
-        //              guilds with no availability data (null) always last.
+        //  The three groups always stay together, in this order: Priority, then Focus, then all other wars.
+        //  The selected sort is applied INSIDE each group (e.g. Least Kills sorts the Focus wars among themselves).
+        //  leastKills / mostKills:  by our kills.
+        //  mostAvail / leastAvail:  by available count; guilds with no availability data yet (null) always last in their group.
+        //  Ties keep the list order.
         applyWarSort() {
             const mode = this.sortMode;
             const isNull = (w) => !(w.availCount >= 0);
             const byOrder = (a, b) => a.originalIndex - b.originalIndex;
-            const arr = [...this.wars];
-
-            if (mode === 'leastKills' || mode === 'mostKills') {
-                const dir = mode === 'leastKills' ? 1 : -1;
-                arr.sort((a, b) => {
-                    const aTop = a.isPriority || a.isFocus;
-                    const bTop = b.isPriority || b.isFocus;
-                    if (aTop && bTop) return byOrder(a, b);
-                    if (aTop) return -1;
-                    if (bTop) return 1;
+            const group = (w) => w.isPriority ? 0 : (w.isFocus ? 1 : 2);
+            const within = (a, b) => {
+                if (mode === 'leastKills' || mode === 'mostKills') {
+                    const dir = mode === 'leastKills' ? 1 : -1;
                     return (a.kills - b.kills) * dir || byOrder(a, b);
-                });
-            } else {
+                }
                 const dir = mode === 'mostAvail' ? -1 : 1;
-                arr.sort((a, b) => {
-                    const an = isNull(a), bn = isNull(b);
-                    if (an && bn) return byOrder(a, b);
-                    if (an) return 1;   // nulls last in both availability sorts
-                    if (bn) return -1;
-                    return (a.availCount - b.availCount) * dir || byOrder(a, b);
-                });
-            }
-            this.wars = arr;
+                const an = isNull(a), bn = isNull(b);
+                if (an && bn) return byOrder(a, b);
+                if (an) return 1;   // nulls last in both availability sorts
+                if (bn) return -1;
+                return (a.availCount - b.availCount) * dir || byOrder(a, b);
+            };
+            this.wars = [...this.wars].sort((a, b) => (group(a) - group(b)) || within(a, b));
         },
         removeItemsById(array1, idsToRemove) {
             return array1.filter(item => !idsToRemove.includes(item.user_id));
