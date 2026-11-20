@@ -308,7 +308,7 @@
                                     <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
                                     <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
                                     <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
-                                    <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
+                                    <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})<span v-if="item.capped" title="Kill cap reached: some available players were left out of Get Next">*</span></a>
                                 </td>
                                 <td><a href="#" title="Click to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a></td>
                                 <td>{{item.kills}}</td>
@@ -321,7 +321,7 @@
                             <span v-if="item.isPriority" class="badge badge-priority">PRIORITY</span>
                             <span v-if="item.isFocus" class="badge badge-focus">FOCUS</span>
                             <span v-if="item.isIgnored" class="badge badge-ignore">IGNORED</span>
-                            <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})</a>
+                            <a :href="item.url" target="_blank">{{item.name}} ({{item.id}})<span v-if="item.capped" title="Kill cap reached: some available players were left out of Get Next">*</span></a>
                         </div>
                         <div class="war-meta">
                             <a href="#" class="avail" title="Tap to refresh this guild" @click.prevent="getAttackableById(item.id)">{{item.avail}}</a>
@@ -336,7 +336,7 @@
                     <h3 class="pane-title">&#128101; Guild Members</h3>
                     <div v-if="sortedDisplay.length === 0" class="empty">No targets yet. Load your wars in Setup, then wait for guilds to finish loading.</div>
                     <a class="member" v-for="item in sortedDisplay" :key="item.user_id" :href="item.url" target="_blank" @click="markFought(item.user_id)">
-                        <span class="g">{{item.guildName}} ({{item.guildId}})</span>
+                        <span class="g">{{item.guildName}} ({{item.guildId}})<span v-if="isCapped(item.guildId)">*</span></span>
                         <span class="n">{{item.name}}</span>
                         <span class="lv lv-m">Lv {{item.level}}</span>
                         <span class="lv-d">({{item.level}})</span>
@@ -426,7 +426,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.11.1'; // bump this when you ship a change
+    const VERSION = 'v5.12.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
@@ -1037,6 +1037,7 @@
                     name: item.name,
                     avail: this.isAutoIgnored(item.id) ? 'ignored' : (old && old.avail !== 'ignored' ? old.avail : '...'),
                     availCount: (old && old.avail !== 'ignored' && !this.isAutoIgnored(item.id)) ? old.availCount : -1,
+                    capped: !!(old && old.capped && !this.isAutoIgnored(item.id)),
                     originalIndex: idx,
                     kills: item.kills,
                     deaths: item.deaths,
@@ -1223,11 +1224,19 @@
 
                 attackable.push(player);
             }
+            // Kill cap: never queue more targets than it takes to reach KILL_CAP kills for this war
+            // (e.g. 12 available at 1490 kills -> only 10 are added). Kills are as of the last load/refresh.
+            const KILL_CAP = 1500;
+            const warRow = this.rawWars.find(x => x.id === warId);
+            const warKills = warRow ? Number(warRow.kills) : NaN;
+            const killRoom = Number.isFinite(warKills) ? Math.max(0, KILL_CAP - warKills) : Infinity;
+            let capped = false; // true when the kill cap actually left someone out (shown as * after the guild name)
             for(var j = 0; j < attackable.length; j++) {
                 let player = attackable[j];
 
                 let curHp = (player.current_hp / player.max_hp)*100;
                 if(curHp >= 50 && player.level <= this.effMax()) {
+                    if (available.length >= killRoom) { capped = true; continue; }
                     if(player.level >= this.myLevel * 0.33 && player.level < this.myLevel * 0.66) {
                         highLevel += 1;
                     }
@@ -1246,6 +1255,7 @@
                 if(this.wars[j].id === warId) {
                     this.wars[j].avail = `${available.length}\/${attackable.length}`;
                     this.wars[j].availCount = available.length;
+                    this.wars[j].capped = capped;
                     break;
                 }
             }
@@ -1279,6 +1289,10 @@
                 p.level >= 1 && p.level <= maxLv && !this.isAutoIgnored(p.guildId) && !this.isLeftOutOfNext(p.guildId));
         },
         // Members / Get Next leave out Ignored guilds, and Priority guilds unless "Add Priority to Get Next" is on. Focus guilds are always included.
+        isCapped(guildId) { // kill cap trimmed this guild's Get Next players
+            const w = this.wars.find(x => x.id === guildId);
+            return !!(w && w.capped);
+        },
         isLeftOutOfNext(guildId) {
             return this.ignoreWarIds.includes(guildId) || (!this.addPriorityToNext && this.priorityWarIds.includes(guildId));
         },
