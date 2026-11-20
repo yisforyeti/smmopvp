@@ -63,6 +63,7 @@
         .getnext button { height: 52px; font-size: 18px; margin: 0; }
         .getnext .gn-main { flex: 1; min-width: 0; }
         .getnext .gn-skip { flex: 0 0 110px; padding: 0; }
+        .getnext-row.skip-left { flex-direction: row-reverse; } /* mobile option: Skip Guild on the left of Get Next */
         .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; }
         .modal { background: #1b2430; width: min(560px, 100%); height: min(80vh, 720px); display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; }
         .modal-head { padding: 12px; border-bottom: 1px solid #2a3340; }
@@ -133,6 +134,7 @@
 
             /* Get Next centered under the main box, then links / Get Profile / stats */
             .getnext { display: none !important; } /* the fixed mobile bar */
+            .mobile-only-opt { display: none !important; } /* Skip button side is a mobile-only option */
             .getnext-desktop { display: flex; justify-content: center; gap: 8px; padding: 10px 0 5px; }
             .getnext-desktop button { width: 375px; height: 48px; padding: 0; margin: 0; }
             .getnext-desktop button.gn-skip { width: 130px; }
@@ -249,6 +251,15 @@
                 <label style="display: flex; align-items: center; gap: 6px; margin: 8px 0 0;">
                     <input type="checkbox" v-model="hideZeroAvail" @change="onOptionChange()" style="margin: 0;"> Hide 0 Attackable
                 </label>
+                <div class="mobile-only-opt" style="margin: 10px 0 0;">
+                    <div style="margin: 0 0 4px;">Skip Guild button (mobile)</div>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; margin: 0 14px 0 0;">
+                        <input type="radio" value="left" v-model="skipSide" @change="saveSettings()" style="margin: 0;"> Left of Get Next
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; margin: 0;">
+                        <input type="radio" value="right" v-model="skipSide" @change="saveSettings()" style="margin: 0;"> Right of Get Next
+                    </label>
+                </div>
             </div>
 
             <div class="card">
@@ -368,7 +379,7 @@
 </div>
 
 <div class="getnext" v-show="tab !== 'setup' && !denied">
-    <div class="getnext-row">
+    <div class="getnext-row" :class="{ 'skip-left': skipSide === 'left' }">
         <button class="gn-main" @click="getNext()" :disabled="sortedDisplay.length === 0">Get Next ({{sortedDisplay.length}})</button>
         <button class="secondary gn-skip" @click="skipGuild()" :disabled="sortedDisplay.length === 0">Skip Guild</button>
     </div>
@@ -426,7 +437,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.12.0'; // bump this when you ship a change
+    const VERSION = 'v5.13.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
@@ -575,6 +586,7 @@
         levelMax: '', // blank = automatic
         ignoreAbove: '', // ignore wars with our kills above this (blank = off)
         hideAbove: false, // also hide the wars above the limit from the Wars list
+        skipSide: 'right', // mobile only: which side of Get Next the Skip Guild button sits on ('left' | 'right')
         addPriorityToNext: false, // include Priority guild members in Members / Get Next (Ignored guilds are always left out)
         hideZeroAvail: false, // hide wars that finished loading and have 0 attackable (guilds still waiting for the API stay visible)
         helpTitle: '',
@@ -678,6 +690,7 @@
                 this.hideAbove = s.hideAbove === true;
                 this.addPriorityToNext = s.addPriorityToNext === true;
                 this.hideZeroAvail = s.hideZeroAvail === true;
+                this.skipSide = s.skipSide === 'left' ? 'left' : 'right';
             } catch (e) {
                 console.log('Could not parse saved settings', e);
             }
@@ -696,6 +709,7 @@
                     hideAbove: this.hideAbove,
                     addPriorityToNext: this.addPriorityToNext,
                     hideZeroAvail: this.hideZeroAvail,
+                    skipSide: this.skipSide,
                 }));
             } catch (e) {
                 console.log('Could not save to localStorage', e);
