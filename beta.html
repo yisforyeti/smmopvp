@@ -293,8 +293,8 @@
                         <select v-model="sortMode" @change="applyWarSort(); saveUi()">
                             <option value="leastKills">Least Kills (Priority/Focus on top)</option>
                             <option value="mostKills">Most Kills (Priority/Focus on top)</option>
-                            <option value="mostAvail">Most Available</option>
-                            <option value="leastAvail">Least Available</option>
+                            <option value="mostAvail">Most Available (Priority/Focus on top)</option>
+                            <option value="leastAvail">Least Available (Priority/Focus on top)</option>
                         </select>
                     </div>
                     <div v-if="wars.length === 0" class="empty">No wars loaded yet. Go to Setup and Save &amp; Load.</div>
@@ -426,7 +426,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.10.0'; // bump this when you ship a change
+    const VERSION = 'v5.11.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
@@ -1287,38 +1287,29 @@
             this.applySort(); // adds / removes Priority members right away
         },
         // Sort paradigm for the wars table:
-        //  leastKills / mostKills: Priority, then Focus, stay on top (in list order);
-        //                          all remaining guilds sort by our kills.
-        //  mostAvail:  whole list sorted by available count, highest first.
-        //  leastAvail: whole list sorted by available count, lowest first,
-        //              guilds with no availability data (null) always last.
+        //  The three groups always stay together, in this order: Priority, then Focus, then all other wars.
+        //  The selected sort is applied INSIDE each group (e.g. Least Kills sorts the Focus wars among themselves).
+        //  leastKills / mostKills:  by our kills.
+        //  mostAvail / leastAvail:  by available count; guilds with no availability data yet (null) always last in their group.
+        //  Ties keep the list order.
         applyWarSort() {
             const mode = this.sortMode;
             const isNull = (w) => !(w.availCount >= 0);
             const byOrder = (a, b) => a.originalIndex - b.originalIndex;
-            const arr = [...this.wars];
-
-            if (mode === 'leastKills' || mode === 'mostKills') {
-                const dir = mode === 'leastKills' ? 1 : -1;
-                arr.sort((a, b) => {
-                    const aTop = a.isPriority || a.isFocus;
-                    const bTop = b.isPriority || b.isFocus;
-                    if (aTop && bTop) return byOrder(a, b);
-                    if (aTop) return -1;
-                    if (bTop) return 1;
+            const group = (w) => w.isPriority ? 0 : (w.isFocus ? 1 : 2);
+            const within = (a, b) => {
+                if (mode === 'leastKills' || mode === 'mostKills') {
+                    const dir = mode === 'leastKills' ? 1 : -1;
                     return (a.kills - b.kills) * dir || byOrder(a, b);
-                });
-            } else {
+                }
                 const dir = mode === 'mostAvail' ? -1 : 1;
-                arr.sort((a, b) => {
-                    const an = isNull(a), bn = isNull(b);
-                    if (an && bn) return byOrder(a, b);
-                    if (an) return 1;   // nulls last in both availability sorts
-                    if (bn) return -1;
-                    return (a.availCount - b.availCount) * dir || byOrder(a, b);
-                });
-            }
-            this.wars = arr;
+                const an = isNull(a), bn = isNull(b);
+                if (an && bn) return byOrder(a, b);
+                if (an) return 1;   // nulls last in both availability sorts
+                if (bn) return -1;
+                return (a.availCount - b.availCount) * dir || byOrder(a, b);
+            };
+            this.wars = [...this.wars].sort((a, b) => (group(a) - group(b)) || within(a, b));
         },
         removeItemsById(array1, idsToRemove) {
             return array1.filter(item => !idsToRemove.includes(item.user_id));
