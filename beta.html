@@ -186,12 +186,12 @@
                 <span v-else-if="progress.running">Loading guilds {{progress.done}}/{{progress.total}}…</span>
                 <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
                 <span v-else>Not loaded</span>
-                <span style="color: #888;">{{version}}</span>
                 <span v-if="apiLimited" class="rate-limited">Rate Limit, Pausing...</span>
-                <span v-else>API {{apiRemaining}}/{{apiLimit}} left per min</span>
+                <span v-else>API {{apiRemaining}}/{{apiLimit}} left per min<span v-if="!apiHeadersOk"> (est.)</span></span>
             </div>
             <div class="loadbar">
                 <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
+                <span style="color: #888;">{{version}}</span>
                 <button class="mini secondary" @click="refresh()" :disabled="!apiKey || wars.length === 0 || progress.running || paused">Refresh</button>
             </div>
         </div>
@@ -446,7 +446,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.15.0'; // bump this when you ship a change
+    const VERSION = 'v5.16.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
@@ -465,6 +465,7 @@
     let rlLimit = 40;
     let rlRemaining = 40;
     let rlResetAt = 0; // ms timestamp when the current window ends (0 = no window open)
+    let rlHeadersOk = false; // true once a response's X-RateLimit-Remaining header was actually readable (CORS may hide it => local estimate)
     function rlRefresh() { // window over => full allowance again
         if (rlResetAt && Date.now() >= rlResetAt) { rlRemaining = rlLimit; rlResetAt = 0; }
     }
@@ -480,6 +481,7 @@
             const rem = parseInt(h.get('X-RateLimit-Remaining'), 10);
             const reset = Number(h.get('X-RateLimit-Reset'));
             const retry = Number(h.get('Retry-After'));
+            rlHeadersOk = h.get('X-RateLimit-Remaining') !== null;
             if (isFinite(lim) && lim > 0) rlLimit = lim;
             if (isFinite(rem)) {
                 if (rem > rlRemaining) rlResetAt = Date.now() + 60000; // server started a fresh window earlier than we thought
@@ -491,7 +493,7 @@
                 if (isFinite(retry) && retry > 0) rlResetAt = Date.now() + retry * 1000;
                 else if (rlResetAt <= Date.now()) rlResetAt = Date.now() + 60000;
             }
-        } catch (e) { /* headers unreadable: keep the local estimate */ }
+        } catch (e) { rlHeadersOk = false; /* headers unreadable: keep the local estimate */ }
     }
     function setApiPaused(v) {
         apiPaused = v;
@@ -591,6 +593,7 @@
         paused: false,
         apiRemaining: 40,
         apiLimit: 40,
+        apiHeadersOk: false, // false = the count shown is a local estimate (headers not readable by the page)
         apiLimited: false, // true while calls are held back because the per-minute allowance is used up
         levelMin: '', // blank = automatic
         levelMax: '', // blank = automatic
@@ -673,7 +676,7 @@
             this.saveSettings(); // persist built-in defaults on first open
             this.loadUi();
             this.startProfile();
-            setInterval(() => { rlRefresh(); this.apiRemaining = rlRemaining; this.apiLimit = rlLimit; this.apiLimited = rlRemaining <= 0 && rlResetAt > Date.now(); }, 1000);
+            setInterval(() => { rlRefresh(); this.apiRemaining = rlRemaining; this.apiLimit = rlLimit; this.apiHeadersOk = rlHeadersOk; this.apiLimited = rlRemaining <= 0 && rlResetAt > Date.now(); }, 1000);
             if (this.apiKey) {
                 await this.loadAll();
             } else {
