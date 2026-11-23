@@ -1,10 +1,10 @@
-5.<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
-    <title>Custom Guild Wars</title>
+    <title>Helheim's War Orders</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
     <style>
         :root { --tab-h: 0px; }
@@ -21,19 +21,21 @@
         .stats .k { color: #40E0D0; }
         .stats .k a { color: #40E0D0; }
         .loadbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: #ccc; }
+        .rate-limited { color: #ff8c1a; font-weight: bold; }
         .api-paused { color: #ffcc66; font-weight: bold; }
         .mini { width: auto; padding: 4px 12px; font-size: 14px; }
         .tabs { display: flex; gap: 6px; margin: 8px 0 12px; }
         .tabs button { flex: 1; margin: 0; padding: 10px 4px; background: transparent; color: #ccc; border: 1px solid #333; border-radius: 8px; font-size: 15px; }
         .tabs button.active { background: #0088ff; color: #fff; border-color: #0088ff; }
         .card, .war, .member { background: #1b2430; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
-        .war { border-left: 3px solid transparent; }
-        .priority-guild { background: rgba(255,75,75,.15); border-left-color: #ff4b4b; }
-        .focus-guild { background: rgba(255,204,102,.15); border-left-color: #ffcc66; }
-        .ignored-guild { opacity: .5; border-left-color: #888; }
+        .war { padding-top: 5px; padding-bottom: 5px; margin-bottom: 6px; }
+        .priority-guild { background: rgba(255,75,75,.15); }
+        .focus-guild { background: rgba(255,204,102,.15); }
+        .ignored-guild { opacity: .5; }
         .war-main { font-size: 16px; }
-        .war-meta { display: flex; gap: 14px; margin-top: 4px; font-size: 14px; color: #bbb; }
-        .war-meta .avail { color: #40E0D0; min-width: 120px; padding: 4px 0; }
+        .war-meta { display: flex; align-items: baseline; gap: 14px; margin-top: 1px; font-size: 14px; line-height: 1.3; color: #bbb; }
+        .war-meta > span:first-of-type { margin-left: auto; }
+        .war-meta .avail { color: #40E0D0; font-size: inherit; line-height: inherit; padding: 0; }
         .badge { font-size: 11px; padding: 1px 5px; border-radius: 3px; margin-right: 6px; font-weight: bold; }
         .badge-priority { background: #ff4b4b; color: #fff; }
         .badge-focus { background: #ffcc66; color: #222; }
@@ -185,7 +187,8 @@
                 <span v-else-if="wars.length">Ready · {{sortedDisplay.length}} targets</span>
                 <span v-else>Not loaded</span>
                 <span style="color: #888;">{{version}}</span>
-                <span>API {{apiRemaining}}/{{apiLimit}} left per min</span>
+                <span v-if="apiLimited" class="rate-limited">Rate Limit, Pausing...</span>
+                <span v-else>API {{apiRemaining}}/{{apiLimit}} left per min</span>
             </div>
             <div class="loadbar">
                 <button class="mini" :class="{secondary: !paused}" @click="togglePause()">{{paused ? '▶ Resume API' : '⏸ Pause API'}}</button>
@@ -443,7 +446,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.14.0'; // bump this when you ship a change
+    const VERSION = 'v5.15.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
@@ -588,6 +591,7 @@
         paused: false,
         apiRemaining: 40,
         apiLimit: 40,
+        apiLimited: false, // true while calls are held back because the per-minute allowance is used up
         levelMin: '', // blank = automatic
         levelMax: '', // blank = automatic
         ignoreAbove: '', // ignore wars with our kills above this (blank = off)
@@ -669,7 +673,7 @@
             this.saveSettings(); // persist built-in defaults on first open
             this.loadUi();
             this.startProfile();
-            setInterval(() => { rlRefresh(); this.apiRemaining = rlRemaining; this.apiLimit = rlLimit; }, 1000);
+            setInterval(() => { rlRefresh(); this.apiRemaining = rlRemaining; this.apiLimit = rlLimit; this.apiLimited = rlRemaining <= 0 && rlResetAt > Date.now(); }, 1000);
             if (this.apiKey) {
                 await this.loadAll();
             } else {
