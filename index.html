@@ -446,7 +446,7 @@
 </body>
 
 <script type="module">
-    const VERSION = 'v5.17.0'; // bump this when you ship a change
+    const VERSION = 'v5.16.0'; // bump this when you ship a change
     const STORAGE_KEY = 'gwp3.settings'; // same key as gwp3 so saved key/lists carry over
     const UI_KEY = 'gwp4.ui';
     const API_GAP_MS = 2000; // min gap between ANY two API calls => max 30/min (API limit is 40/min, see the rate limit tracker below)
@@ -1248,7 +1248,7 @@
                 seenInGuild.add(String(player.user_id));
                 player.guildName = guildName.name;
                 player.guildId = warId;
-                if(ignoredPlayers.has(String(player.user_id))) continue; // on the Ignore Player IDs list
+                if(ignoredPlayers.has(String(parseInt(player.user_id, 10)))) continue; // on the Ignore Player IDs list
                 if(player.banned == 1 || player.safe_mode == 1) continue;
 
                 if(player.level < this.effMin()) continue;
@@ -1329,7 +1329,7 @@
             const ignoredPlayers = this.ignoredPlayerSet();
             this.sortedDisplay = this.sortedDisplay.filter(p =>
                 p.level >= 1 && p.level <= maxLv && !this.isAutoIgnored(p.guildId) && !this.isLeftOutOfNext(p.guildId)
-                && !ignoredPlayers.has(String(p.user_id)));
+                && !ignoredPlayers.has(String(parseInt(p.user_id, 10))));
 
             // Members / Get Next follow the Wars list order (Priority, Focus, then the selected sort), so both lists
             // always agree. Players keep their load order inside a guild (Array.sort is stable).
@@ -1345,7 +1345,9 @@
         },
         // Parses the "Ignore Player IDs" box: split on commas, semicolons and/or whitespace, trim, keep digits only.
         ignoredPlayerSet() {
-            return new Set(String(this.ignorePlayerIds || '').split(/[\s,;]+/).map(v => v.trim()).filter(v => /^\d+$/.test(v)));
+            // Pull out every run of digits, so "#1208275", "1208275.", pasted names/labels or hidden characters still work.
+            const runs = String(this.ignorePlayerIds || '').match(/\d+/g) || [];
+            return new Set(runs.map(v => String(parseInt(v, 10))));
         },
         ignoredPlayerCount() { return this.ignoredPlayerSet().size; },
         onIgnorePlayersChange() {
