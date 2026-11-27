@@ -1241,8 +1241,11 @@
             let veryHighLevel = 0;
 
             const ignoredPlayers = this.ignoredPlayerSet();
+            const seenInGuild = new Set(); // never add the same player twice for this guild
             for(var j = 0; j < data.length; j++) {
                 let player = data[j];
+                if(seenInGuild.has(String(player.user_id))) continue;
+                seenInGuild.add(String(player.user_id));
                 player.guildName = guildName.name;
                 player.guildId = warId;
                 if(ignoredPlayers.has(String(player.user_id))) continue; // on the Ignore Player IDs list
@@ -1263,6 +1266,10 @@
             const warKills = warRow ? Number(warRow.kills) : NaN;
             const killRoom = Number.isFinite(warKills) ? Math.max(0, KILL_CAP - warKills) : Infinity;
             let capped = false; // true when the kill cap actually left someone out (shown as * after the guild name)
+            // Re-fetching a guild (refresh tap / overlapping load) replaces its earlier entries instead of stacking duplicates.
+            // This runs synchronously after the await, so two fetches can never interleave here.
+            this.allAvail = this.allAvail.filter(p => p.guildId !== warId);
+            const inNext = new Set(this.allAvail.map(p => String(p.user_id))); // players already in Get Next (any guild)
             for(var j = 0; j < attackable.length; j++) {
                 let player = attackable[j];
 
@@ -1275,6 +1282,8 @@
                     else if(player.level >= this.myLevel * 0.66) {
                         veryHighLevel += 1;
                     }
+                    if (inNext.has(String(player.user_id))) continue; // already in this guild's list / Get Next: don't add again
+                    inNext.add(String(player.user_id));
                     player.hpp_percent = curHp;
                     player.url = `https://web.simple-mmo.com/user/attack/${player.user_id}?autoclose=1&level=${player.level}`;
                     available.push(player);
